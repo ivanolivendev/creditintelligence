@@ -1,6 +1,6 @@
 # Relatório de execução — Evolution Pack 4.0
 
-**Data/ambiente:** 20/11/2026, Windows/PowerShell, Docker Compose local, PostgreSQL 16, Java 21, Python 3.12, React/Vite. Branch `main`; base `9650b14`. O conteúdo pré-existente era majoritariamente não rastreado; não houve reset, limpeza nem commit. Nenhum deploy AWS.
+**Data/ambiente:** 20/11/2026, Windows/PowerShell, Docker Compose local, PostgreSQL 16, Java 21, Python 3.12, React/Vite. Branch Git Flow `feature/evolution-pack-4`; base `9650b14`. Nenhum deploy AWS.
 
 ## Inventário e matriz Blueprint → implementação
 
@@ -39,6 +39,23 @@ O Blueprint V3 continua válido para proposta, análise documental e decisão hu
 | G6 entrega | PASS | README, OpenSpec validado estritamente, este relatório, comandos e limites documentados. |
 
 Comandos: `docker compose --progress plain up --build -d`; `docker compose --profile test run --rm backend-test mvn -B -ntp test` (23/23 após os novos testes); teste focado `ConsultCenterSandboxAdapterTest` (4/4); `docker compose --profile test run --rm document-intelligence-test` (10/10); `docker compose --profile test run --rm document-intelligence-test ruff check app tests`; `npm run format:check`, `npm run lint`, `npm run build`; `scripts/smoke-proposals.ps1`, `scripts/smoke-analysis.ps1`, `scripts/smoke-financial.ps1`, `scripts/smoke-bureau.ps1`; `openspec validate evolution-financial-documents --strict`; `openspec validate --specs --strict` (10/10). No navegador, um upload com metadado de agosto e conteúdo de outro mês falhou com `INVALID_EXTRACTION_RESPONSE`, como exigido pelo contrato; os PDFs corretos foram reenviados e a análise passou.
+
+## Revalidação completa — 20/11/2026
+
+Uma nova execução, a partir da árvore limpa da branch publicada, confirmou:
+
+| Verificação | Resultado |
+|---|---|
+| Compose | Build limpo das três imagens; PostgreSQL, Python, backend e frontend saudáveis. |
+| Java | 23 testes, 0 falhas, 0 erros, 0 ignorados. |
+| Python | 10 testes aprovados; Ruff sem achados. |
+| Frontend | `npm ci` com 0 vulnerabilidades; Prettier, ESLint e build Vite aprovados. |
+| OpenSpec | 10 specs aprovadas com `--strict`; nenhuma mudança ativa pendente. |
+| Smokes integrados | T01–T18 e T22 aprovados, incluindo upload inválido/oversize, versionamento, idempotência, conflito, snapshots, análise, financeiro, decisão e bloqueio após decisão final. |
+| Bureau externo | Sandbox oficial sintético aprovado em `SANDBOX`, incluindo resposta `UNAVAILABLE` sem fabricar restrições; backend restaurado e confirmado em `BUREAU_MODE=mock`. |
+| Interface | Jornada no navegador aprovada: login, proposta sintética, documento, bureau mock, análise/dossiê e decisão humana `MORE_INFO_REQUIRED`. A análise `28c00f8d-00ae-4f25-88d3-74b64e8beb00` exibiu política `CREDIT_POLICY_DEMO_2.0`, evidências, limitações e IA `MOCK`. |
+
+O caminho Bedrock real não foi chamado porque requer credenciais AWS e pode gerar cobrança. Seu contrato, saída inválida, indisponibilidade e fallback foram exercitados por testes automatizados; nenhuma chamada paga foi necessária para esta revalidação.
 
 ## Integrações externas e custos
 
