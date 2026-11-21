@@ -2,6 +2,7 @@ package com.creditintelligence.analysis.application;
 
 import com.creditintelligence.analysis.infrastructure.AnalysisDataStore;
 import com.creditintelligence.integration.documentintelligence.PythonExplanationClient;
+import com.creditintelligence.integration.documentintelligence.PythonExplanationClient.ExplanationException;
 import com.creditintelligence.integration.documentintelligence.PythonExplanationClient.ExplainRequest;
 import com.creditintelligence.integration.documentintelligence.PythonExplanationClient.ExplainResponse;
 import com.creditintelligence.integration.documentintelligence.PythonExplanationClient.FindingContext;
@@ -10,6 +11,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.concurrent.TimeUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -59,15 +61,28 @@ public class AIExplanationService {
                         finding.details(), finding.evidenceRef())).toList(),
                 evidence, policyRefs, correlationId, assessment,
                 data.transactionReferences(analysisId));
-        try {
-            var response = python.explain(request);
-            validate(request, response);
-            save(analysisId, "AVAILABLE", response);
-        } catch (InvalidExtractionException ex) {
-            save(analysisId, "INVALID_OUTPUT", null);
-        } catch (RuntimeException ex) {
-            save(analysisId, "UNAVAILABLE", null);
+        var started = System.nanoTime();
+        String failureCode = "DOCUMENT_INTELLIGENCE_UNAVAILABLE";
+        for (var attempt = 1; attempt <= 3; attempt++) {
+            try {
+                var response = python.explain(request);
+                validate(request, response);
+                save(analysisId, "AVAILABLE", null, response, attempt, elapsedMillis(started));
+                return;
+            } catch (InvalidExtractionException ex) {
+                save(analysisId, "INVALID_OUTPUT", "INVALID_EXPLANATION_CONTRACT", null,
+                        attempt, elapsedMillis(started));
+                return;
+            } catch (ExplanationException ex) {
+                failureCode = ex.code();
+                if (!ex.retryable() || attempt == 3) break;
+            } catch (RuntimeException ex) {
+                failureCode = "DOCUMENT_INTELLIGENCE_UNAVAILABLE";
+                if (attempt == 3) break;
+            }
+            pauseBeforeRetry(attempt);
         }
+        save(analysisId, "UNAVAILABLE", failureCode, null, 3, elapsedMillis(started));
     }
 
     @Transactional(readOnly = true)
@@ -131,19 +146,44 @@ public class AIExplanationService {
         return value == null || value.isBlank();
     }
 
-    private void save(UUID analysisId, String status, ExplainResponse response) {
+    private void save(UUID analysisId, String status, String failureCode, ExplainResponse response,
+            int attempts, long durationMs) {
         try {
             jdbc.update("""
                     INSERT INTO ai_explanation
-                    (analysis_id, status, provider, model_id, prompt_version, content_json, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT (analysis_id) DO NOTHING
+                    (analysis_id, status, provider, model_id, prompt_version, content_json,
+                     created_at, attempt_count, failure_code, duration_ms, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (analysis_id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        provider = EXCLUDED.provider,
+                        model_id = EXCLUDED.model_id,
+                        prompt_version = EXCLUDED.prompt_version,
+                        content_json = EXCLUDED.content_json,
+                        attempt_count = EXCLUDED.attempt_count,
+                        failure_code = EXCLUDED.failure_code,
+                        duration_ms = EXCLUDED.duration_ms,
+                        updated_at = EXCLUDED.updated_at
                     """, analysisId, status, response == null ? null : response.provider(),
                     response == null ? null : response.modelId(),
                     response == null ? null : response.promptVersion(),
-                    response == null ? null : json.writeValueAsString(response), OffsetDateTime.now(ZoneOffset.UTC));
+                    response == null ? null : json.writeValueAsString(response), OffsetDateTime.now(ZoneOffset.UTC),
+                    attempts, failureCode, durationMs, OffsetDateTime.now(ZoneOffset.UTC));
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Explanation could not be serialized", ex);
+        }
+    }
+
+    private long elapsedMillis(long started) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+    }
+
+    private void pauseBeforeRetry(int attempt) {
+        try {
+            Thread.sleep(250L * (1L << (attempt - 1)));
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Explanation retry interrupted", ex);
         }
     }
 }

@@ -5,6 +5,7 @@ import java.util.UUID;
 import com.creditintelligence.analysis.domain.FinancialEngine.Assessment;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -14,18 +15,41 @@ public class PythonExplanationClient {
     private final String token;
 
     public PythonExplanationClient(@Value("${document.intelligence.url}") String url,
-            @Value("${document.intelligence.token}") String token) {
+            @Value("${document.intelligence.token}") String token,
+            @Value("${document.intelligence.connect-timeout-ms:5000}") int connectTimeoutMs,
+            @Value("${document.intelligence.read-timeout-ms:90000}") int readTimeoutMs) {
         var requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(3000);
-        requestFactory.setReadTimeout(15000);
+        requestFactory.setConnectTimeout(connectTimeoutMs);
+        requestFactory.setReadTimeout(readTimeoutMs);
         this.client = RestClient.builder().baseUrl(url).requestFactory(requestFactory).build();
         this.token = token;
     }
 
     public ExplainResponse explain(ExplainRequest request) {
-        return client.post().uri("/internal/v1/explain")
-                .header("X-Internal-Token", token).body(request)
-                .retrieve().body(ExplainResponse.class);
+        try {
+            return client.post().uri("/internal/v1/explain")
+                    .header("X-Internal-Token", token).body(request)
+                    .retrieve().body(ExplainResponse.class);
+        } catch (RestClientResponseException ex) {
+            var detail = ex.getResponseBodyAsString();
+            var retryable = ex.getStatusCode().is5xxServerError();
+            throw new ExplanationException("DOCUMENT_INTELLIGENCE_" + ex.getStatusCode().value(),
+                    retryable, detail, ex);
+        }
+    }
+
+    public static final class ExplanationException extends RuntimeException {
+        private final String code;
+        private final boolean retryable;
+
+        public ExplanationException(String code, boolean retryable, String detail, Throwable cause) {
+            super(detail, cause);
+            this.code = code;
+            this.retryable = retryable;
+        }
+
+        public String code() { return code; }
+        public boolean retryable() { return retryable; }
     }
 
     public record FindingContext(String code, String result, String details, String evidenceRef) {}

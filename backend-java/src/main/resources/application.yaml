@@ -32,6 +32,8 @@ document:
   intelligence:
     url: ${DOCUMENT_INTELLIGENCE_URL}
     token: ${INTERNAL_SERVICE_TOKEN}
+    connect-timeout-ms: ${DOCUMENT_INTELLIGENCE_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${DOCUMENT_INTELLIGENCE_READ_TIMEOUT_MS:90000}
 bureau:
   mode: ${BUREAU_MODE:mock}
   sandbox-token: ${BUREAU_SANDBOX_TOKEN:}

@@ -2,6 +2,7 @@ package com.creditintelligence;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
@@ -49,7 +50,8 @@ class AIExplanationServiceTest {
                         List.of("POLICY-1.0:INVENTED"), List.of())), List.of("Demo only")));
         service.generate(analysisId, policy, "test");
         verify(jdbc).update(anyString(), eq(analysisId), eq("INVALID_OUTPUT"),
-                isNull(), isNull(), isNull(), isNull(), any(OffsetDateTime.class));
+                isNull(), isNull(), isNull(), isNull(), any(OffsetDateTime.class), eq(1),
+                eq("INVALID_EXPLANATION_CONTRACT"), anyLong(), any(OffsetDateTime.class));
     }
 
     @Test
@@ -57,6 +59,7 @@ class AIExplanationServiceTest {
         when(python.explain(any())).thenThrow(new RestClientException("synthetic outage"));
         service.generate(analysisId, policy, "test");
         verify(jdbc).update(anyString(), eq(analysisId), eq("UNAVAILABLE"),
-                isNull(), isNull(), isNull(), isNull(), any(OffsetDateTime.class));
+                isNull(), isNull(), isNull(), isNull(), any(OffsetDateTime.class), eq(3),
+                eq("DOCUMENT_INTELLIGENCE_UNAVAILABLE"), anyLong(), any(OffsetDateTime.class));
     }
 }

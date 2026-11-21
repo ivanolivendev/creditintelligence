@@ -2,11 +2,14 @@ import os
 import secrets
 import json
 import logging
+import time
 from pathlib import Path
 
 import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.extractor import DocumentReferenceError, extract_document
 from app.schemas import (ExplainRequest, ExplainResponse, FindingExplanation, Hypothesis,
@@ -106,7 +109,18 @@ def explain_with_bedrock(request: ExplainRequest) -> ExplainResponse:
               "and reviewStatus. Each explanation must contain all four fields even when a list is empty. "
               "Never recommend approval or rejection. Keep the summary and messages concise and in Brazilian Portuguese.")
     try:
-        client = boto3.client("bedrock-runtime", region_name=region)
+        started = time.monotonic()
+        timeout_seconds = int(os.getenv("BEDROCK_READ_TIMEOUT_SECONDS", "60"))
+        max_attempts = int(os.getenv("BEDROCK_MAX_ATTEMPTS", "3"))
+        client = boto3.client(
+            "bedrock-runtime",
+            region_name=region,
+            config=Config(
+                connect_timeout=5,
+                read_timeout=timeout_seconds,
+                retries={"max_attempts": max_attempts, "mode": "adaptive"},
+            ),
+        )
         result = client.converse(
             modelId=model_id,
             system=[{"text": system}],
@@ -137,9 +151,21 @@ def explain_with_bedrock(request: ExplainRequest) -> ExplainResponse:
             limitations=["Saída de IA não altera fatos ou findings.",
                          "A decisão final cabe exclusivamente à pessoa analista."],
         )
+        logger.info("Bedrock explanation completed model=%s duration_ms=%d", model_id,
+                    int((time.monotonic() - started) * 1000))
+    except (ClientError, BotoCoreError) as exc:
+        code = exc.response.get("Error", {}).get("Code", "AWS_ERROR") if isinstance(exc, ClientError) else type(exc).__name__
+        logger.warning("Bedrock explanation failed class=AWS code=%s duration_ms=%d", code,
+                       int((time.monotonic() - started) * 1000))
+        raise HTTPException(status_code=502, detail="BEDROCK_PROVIDER_ERROR") from exc
+    except (json.JSONDecodeError, KeyError, StopIteration, TypeError, ValueError, ValidationError) as exc:
+        logger.warning("Bedrock explanation failed class=INVALID_MODEL_RESPONSE error=%s duration_ms=%d",
+                       type(exc).__name__, int((time.monotonic() - started) * 1000))
+        raise HTTPException(status_code=422, detail="INVALID_MODEL_RESPONSE") from exc
     except Exception as exc:
-        logger.warning("Bedrock explanation failed (%s)", type(exc).__name__)
-        raise HTTPException(status_code=503, detail="Bedrock explanation unavailable or invalid") from exc
+        logger.warning("Bedrock explanation failed class=UNAVAILABLE error=%s duration_ms=%d",
+                       type(exc).__name__, int((time.monotonic() - started) * 1000))
+        raise HTTPException(status_code=503, detail="BEDROCK_UNAVAILABLE") from exc
 
 
 def _parse_bedrock_json(raw: str) -> dict:
