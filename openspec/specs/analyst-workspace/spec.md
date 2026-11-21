@@ -31,6 +31,32 @@ The analyst workspace SHALL allow a demo analyst to upload three payslips and th
 - **WHEN** a required period is missing or ambiguous
 - **THEN** the workspace explains what needs review and does not present a verified capacity
 
+### Requirement: Guided financial document intake
+The workspace SHALL allow the analyst to select multiple PDFs together, review the detected document type and period before upload, and see the current financial-document coverage before starting analysis. The UI SHALL prevent duplicate type-period slots or filename metadata conflicts from being submitted as a valid batch.
+
+#### Scenario: Complete six-document batch
+- **WHEN** the analyst selects three payslips and three statements whose filenames identify three matching periods
+- **THEN** the workspace pre-fills type and period for every file, allows review before upload, and shows `3/3` payslips, `3/3` statements, and `3/3` matched periods after upload
+
+#### Scenario: Conflicting batch metadata
+- **WHEN** two selected files target the same type-period slot or a selected type or period conflicts with detected filename metadata
+- **THEN** the workspace identifies each affected file and prevents batch submission until the conflict is corrected
+
+#### Scenario: Partial dossier preflight
+- **WHEN** fewer than three matching payslip and statement periods are current
+- **THEN** the workspace labels the expected result as partial and explains that missing financial indicators remain not evaluated
+
+### Requirement: Operational analysis failure messages
+The workspace SHALL translate analysis failure states into corrective Portuguese guidance and SHALL keep internal error codes in optional technical details rather than using them as the primary message.
+
+#### Scenario: Permanent extraction contract failure
+- **WHEN** analysis ends as `FAILED_PERMANENT` with `INVALID_EXTRACTION_RESPONSE`
+- **THEN** the workspace explains that a document type or period must be corrected and does not describe the failure as retryable
+
+#### Scenario: Temporary document service failure
+- **WHEN** analysis ends as `FAILED_RETRYABLE` because document intelligence is unavailable
+- **THEN** the workspace explains that uploaded files were preserved and that the analyst can retry later
+
 ### Requirement: Actionable deterministic findings
 The workspace SHALL explain deterministic findings in plain Portuguese using the policy and evidence attached to the analyzed snapshot, without exposing raw internal finding codes as the primary title.
 

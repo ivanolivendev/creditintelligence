@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   api,
   type Analysis,
@@ -8,6 +8,16 @@ import {
   type Document,
   type Proposal,
 } from "./api";
+import {
+  BANK_STATEMENT,
+  PAYSLIP,
+  analysisFailureMessage,
+  inferDocumentMetadata,
+  latestDocumentVersions,
+  summarizeFinancialCoverage,
+  validateUploadDrafts,
+  type UploadDraft,
+} from "./document-workflow";
 
 const money = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
@@ -56,6 +66,11 @@ function badge(value: string) {
     INVALID: "Inválido",
     UNAVAILABLE: "Indisponível",
     INVALID_OUTPUT: "Resposta inválida",
+    READY_FOR_REVIEW: "Pronta para revisão",
+    MATCH: "Conciliado",
+    NOT_REQUESTED: "Não consultado",
+    FAILED_PERMANENT: "Falha permanente",
+    FAILED_RETRYABLE: "Falha temporária",
   };
   return (
     <span className={`badge badge-${tone}`}>
@@ -89,6 +104,20 @@ function providerLabel(provider: string) {
 function documentLabel(type: string) {
   return documentLabels[type] ?? type.replaceAll("_", " ").toLowerCase();
 }
+
+const formatPeriods = (periods: string[]) =>
+  periods.length > 0 ? periods.join(", ") : "nenhuma competência";
+
+const limitationLabels: Record<string, string> = {
+  "Partial Price simulation excludes CET, IOF, insurance and fees; not a credit offer.":
+    "A simulação Price não inclui CET, IOF, seguros ou tarifas e não representa uma oferta de crédito.",
+  "Three factual net salary periods are required for verified capacity.":
+    "São necessários três salários líquidos comprovados para verificar a capacidade.",
+  "Salary credits require human reconciliation.":
+    "Os créditos salariais exigem conferência humana.",
+  "Known obligations are incomplete or uncertain.":
+    "As obrigações conhecidas estão incompletas ou incertas.",
+};
 
 function FindingCard({
   finding,
@@ -340,9 +369,8 @@ export default function App() {
   const [lookupId, setLookupId] = useState("");
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [documentType, setDocumentType] = useState("INCOME_PROOF");
-  const [period, setPeriod] = useState("2026-08");
+  const [uploadDrafts, setUploadDrafts] = useState<UploadDraft[]>([]);
+  const uploadInput = useRef<HTMLInputElement>(null);
   const [principal, setPrincipal] = useState("");
   const [termMonths, setTermMonths] = useState("36");
   const [monthlyRatePercent, setMonthlyRatePercent] = useState("2");
@@ -395,6 +423,7 @@ export default function App() {
       setProposal(created);
       setLookupId(created.id);
       setDocuments([]);
+      setUploadDrafts([]);
       setAnalysis(null);
       setBureauSnapshot(null);
       setDecisions([]);
@@ -418,6 +447,7 @@ export default function App() {
         ]);
       setProposal(loaded);
       setDocuments(loadedDocuments);
+      setUploadDrafts([]);
       setDecisions(loadedDecisions);
       setBureauSnapshot(latestBureau);
       setAnalysis(null);
@@ -427,29 +457,75 @@ export default function App() {
     });
   }
 
-  function upload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!credentials || !proposal || !file) return;
+  function selectUploadFiles(event: ChangeEvent<HTMLInputElement>) {
+    const selected = [...(event.currentTarget.files ?? [])];
+    setUploadDrafts(
+      selected.map((file) => {
+        const detected = inferDocumentMetadata(file.name);
+        return {
+          id: crypto.randomUUID(),
+          file,
+          type: detected.type ?? "INCOME_PROOF",
+          period: detected.period ?? "",
+          detectedType: detected.type,
+          detectedPeriod: detected.period,
+        };
+      }),
+    );
+    setError("");
+    setNotice("");
+  }
+
+  function updateUploadDraft(
+    id: string,
+    update: Partial<Pick<UploadDraft, "type" | "period">>,
+  ) {
+    setUploadDrafts((current) =>
+      current.map((draft) =>
+        draft.id === id ? { ...draft, ...update } : draft,
+      ),
+    );
+  }
+
+  function removeUploadDraft(id: string) {
+    setUploadDrafts((current) => current.filter((draft) => draft.id !== id));
+  }
+
+  function uploadDocuments() {
+    if (!credentials || !proposal || uploadDrafts.length === 0) return;
     void run("upload", async () => {
-      const uploaded = await api.upload(
-        credentials,
-        proposal.id,
-        documentType,
-        file,
-        documentType === "PAYSLIP" || documentType === "BANK_STATEMENT"
-          ? period
-          : undefined,
-      );
+      const validation = validateUploadDrafts(uploadDrafts);
+      if ([...validation.values()].some((problems) => problems.length > 0)) {
+        throw new Error("Corrija os itens destacados antes de enviar.");
+      }
+      let uploadedCount = 0;
+      try {
+        for (const draft of uploadDrafts) {
+          await api.upload(
+            credentials,
+            proposal.id,
+            draft.type,
+            draft.file,
+            draft.type === PAYSLIP || draft.type === BANK_STATEMENT
+              ? draft.period
+              : undefined,
+          );
+          uploadedCount += 1;
+        }
+      } catch (problem) {
+        setDocuments(await api.listDocuments(credentials, proposal.id));
+        const failedFile = uploadDrafts[uploadedCount]?.file.name;
+        throw new Error(
+          `Enviamos ${uploadedCount} de ${uploadDrafts.length} arquivos. Não foi possível enviar ${failedFile ?? "o próximo arquivo"}: ${problem instanceof Error ? problem.message : "falha inesperada"}`,
+        );
+      }
       setDocuments(await api.listDocuments(credentials, proposal.id));
       setAnalysis(null);
-      setFile(null);
+      setUploadDrafts([]);
+      if (uploadInput.current) uploadInput.current.value = "";
       setNotice(
-        `Documento v${uploaded.version} recebido. Execute nova análise para este snapshot.`,
+        `${uploadedCount} documentos recebidos e conferidos. Revise a cobertura antes de analisar.`,
       );
-      const input = document.getElementById(
-        "document-file",
-      ) as HTMLInputElement | null;
-      if (input) input.value = "";
     });
   }
 
@@ -473,10 +549,11 @@ export default function App() {
           : undefined,
       );
       setAnalysis(result);
+      const failure = analysisFailureMessage(result);
       setNotice(
         result.status === "COMPLETED"
           ? "Dossiê persistido e pronto para revisão."
-          : `Análise em ${result.status}. Consulte o estado antes de decidir.`,
+          : failure.message,
       );
     });
   }
@@ -526,19 +603,28 @@ export default function App() {
   const latestDecision = decisions.at(-1);
   const final =
     proposal?.status === "APPROVED" || proposal?.status === "REJECTED";
-  const latestDocuments = [
-    ...new Map(
-      documents.map((item) => [
-        `${item.type}:${item.period ?? ""}`,
-        documents
-          .filter(
-            (candidate) =>
-              candidate.type === item.type && candidate.period === item.period,
-          )
-          .at(-1)!,
-      ]),
-    ).values(),
-  ];
+  const latestDocuments = latestDocumentVersions(documents);
+  const financialCoverage = summarizeFinancialCoverage(documents);
+  const uploadValidation = validateUploadDrafts(uploadDrafts);
+  const uploadHasErrors = [...uploadValidation.values()].some(
+    (problems) => problems.length > 0,
+  );
+  const historicalDocuments = documents.filter(
+    (document) => !latestDocuments.some((latest) => latest.id === document.id),
+  );
+  const hasFinancialDocuments = latestDocuments.some(
+    (document) => document.type === PAYSLIP || document.type === BANK_STATEMENT,
+  );
+  const analysisFailure =
+    analysis?.errorCode && analysis.status !== "COMPLETED"
+      ? analysisFailureMessage(analysis)
+      : null;
+  const findingReviewCount =
+    analysis?.findings.filter((finding) => finding.result !== "PASS").length ??
+    0;
+  const findingPassCount =
+    analysis?.findings.filter((finding) => finding.result === "PASS").length ??
+    0;
   const snapshotCurrent =
     analysis !== null &&
     analysis.documents.length === latestDocuments.length &&
@@ -689,70 +775,81 @@ export default function App() {
                 </div>
                 {proposal && badge(proposal.status)}
               </div>
-              <div className="two-columns">
-                <form onSubmit={createProposal} className="stack">
-                  <h3>Nova proposta de demonstração</h3>
-                  <p>Preencha somente com dados fictícios.</p>
-                  <label>
-                    Nome fictício
-                    <input
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      required
-                      maxLength={160}
-                      placeholder="Ex.: Alex Demo"
-                    />
-                  </label>
-                  <label>
-                    Identificador sintético
-                    <input
-                      value={identifier}
-                      onChange={(event) => setIdentifier(event.target.value)}
-                      pattern="DEMO-.*"
-                      required
-                    />
-                  </label>
-                  <label>
-                    Renda mensal declarada (BRL)
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={income}
-                      onChange={(event) => setIncome(event.target.value)}
-                      required
-                      placeholder="Ex.: 7500.00"
-                    />
-                  </label>
-                  <button
-                    disabled={!!busy}
-                    className="primary-button"
-                    type="submit"
-                  >
-                    {busy === "create" ? "Criando…" : "Criar proposta →"}
-                  </button>
-                </form>
-                <form onSubmit={loadProposal} className="stack load-box">
-                  <h3>Retomar proposta</h3>
-                  <p>Use o ID salvo em uma sessão anterior.</p>
-                  <label>
-                    ID da proposta
-                    <input
-                      value={lookupId}
-                      onChange={(event) => setLookupId(event.target.value)}
-                      placeholder="UUID da proposta"
-                      required
-                    />
-                  </label>
-                  <button
-                    disabled={!!busy}
-                    className="secondary-button"
-                    type="submit"
-                  >
-                    Carregar proposta
-                  </button>
-                </form>
-              </div>
+              <details
+                className="proposal-tools"
+                open={!proposal}
+                key={proposal?.id ?? "new-proposal"}
+              >
+                <summary>
+                  {proposal
+                    ? "Criar ou carregar outra proposta"
+                    : "Criar ou retomar uma proposta"}
+                </summary>
+                <div className="two-columns">
+                  <form onSubmit={createProposal} className="stack">
+                    <h3>Nova proposta de demonstração</h3>
+                    <p>Preencha somente com dados fictícios.</p>
+                    <label>
+                      Nome fictício
+                      <input
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        required
+                        maxLength={160}
+                        placeholder="Ex.: Alex Demo"
+                      />
+                    </label>
+                    <label>
+                      Identificador sintético
+                      <input
+                        value={identifier}
+                        onChange={(event) => setIdentifier(event.target.value)}
+                        pattern="DEMO-.*"
+                        required
+                      />
+                    </label>
+                    <label>
+                      Renda mensal declarada (BRL)
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={income}
+                        onChange={(event) => setIncome(event.target.value)}
+                        required
+                        placeholder="Ex.: 7500.00"
+                      />
+                    </label>
+                    <button
+                      disabled={!!busy}
+                      className="primary-button"
+                      type="submit"
+                    >
+                      {busy === "create" ? "Criando…" : "Criar proposta →"}
+                    </button>
+                  </form>
+                  <form onSubmit={loadProposal} className="stack load-box">
+                    <h3>Retomar proposta</h3>
+                    <p>Use o ID salvo em uma sessão anterior.</p>
+                    <label>
+                      ID da proposta
+                      <input
+                        value={lookupId}
+                        onChange={(event) => setLookupId(event.target.value)}
+                        placeholder="UUID da proposta"
+                        required
+                      />
+                    </label>
+                    <button
+                      disabled={!!busy}
+                      className="secondary-button"
+                      type="submit"
+                    >
+                      Carregar proposta
+                    </button>
+                  </form>
+                </div>
+              </details>
               {proposal && (
                 <div className="summary-strip">
                   <div>
@@ -785,58 +882,216 @@ export default function App() {
                       MiB.
                     </p>
                   </div>
-                  {badge(`${documents.length} VERSÕES`)}
+                  {badge(`${latestDocuments.length} DOCUMENTOS ATUAIS`)}
                 </div>
-                <form onSubmit={upload} className="upload-row">
-                  <label>
-                    Tipo
-                    <select
-                      value={documentType}
-                      onChange={(event) => setDocumentType(event.target.value)}
-                      disabled={final}
-                    >
-                      <option value="INCOME_PROOF">Comprovante de renda</option>
-                      <option value="PAYSLIP">Contracheque</option>
-                      <option value="BANK_STATEMENT">Extrato bancário</option>
-                      <option value="IDENTIFICATION">Identificação</option>
-                    </select>
-                  </label>
-                  {(documentType === "PAYSLIP" ||
-                    documentType === "BANK_STATEMENT") && (
-                    <label>
-                      Competência / mês do extrato
+                <div className="batch-upload">
+                  <div className="upload-intro">
+                    <div>
+                      <h3>Envie todos os PDFs de uma vez</h3>
+                      <p>
+                        Identificamos tipo e competência pelo nome do arquivo.
+                        Confira a grade antes de enviar.
+                      </p>
+                    </div>
+                    <label className="upload-picker">
+                      <span>Selecionar PDFs</span>
                       <input
-                        type="month"
-                        value={period}
-                        onChange={(event) => setPeriod(event.target.value)}
-                        required
+                        ref={uploadInput}
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        multiple
+                        aria-label="PDFs da proposta"
+                        onChange={selectUploadFiles}
+                        disabled={final || !!busy}
                       />
                     </label>
+                  </div>
+                  {uploadDrafts.length > 0 && (
+                    <div className="upload-review">
+                      <div className="review-heading">
+                        <div>
+                          <strong>
+                            Revise {uploadDrafts.length} arquivo
+                            {uploadDrafts.length === 1 ? "" : "s"}
+                          </strong>
+                          <small>
+                            Nada será enviado enquanto houver item destacado.
+                          </small>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => {
+                            setUploadDrafts([]);
+                            if (uploadInput.current)
+                              uploadInput.current.value = "";
+                          }}
+                        >
+                          Limpar seleção
+                        </button>
+                      </div>
+                      <div className="upload-queue">
+                        {uploadDrafts.map((draft) => {
+                          const problems = uploadValidation.get(draft.id) ?? [];
+                          const financial =
+                            draft.type === PAYSLIP ||
+                            draft.type === BANK_STATEMENT;
+                          return (
+                            <div
+                              className={`upload-item ${problems.length > 0 ? "has-error" : ""}`}
+                              key={draft.id}
+                            >
+                              <div className="upload-file-name">
+                                <span className="doc-icon">PDF</span>
+                                <div>
+                                  <strong>{draft.file.name}</strong>
+                                  <small>
+                                    {(draft.file.size / 1024).toFixed(1)} KiB
+                                  </small>
+                                </div>
+                              </div>
+                              <label>
+                                Tipo
+                                <select
+                                  value={draft.type}
+                                  onChange={(event) =>
+                                    updateUploadDraft(draft.id, {
+                                      type: event.target.value,
+                                    })
+                                  }
+                                >
+                                  <option value="INCOME_PROOF">
+                                    Comprovante de renda
+                                  </option>
+                                  <option value={PAYSLIP}>Contracheque</option>
+                                  <option value={BANK_STATEMENT}>
+                                    Extrato bancário
+                                  </option>
+                                  <option value="IDENTIFICATION">
+                                    Identificação
+                                  </option>
+                                </select>
+                              </label>
+                              <label>
+                                Competência
+                                <input
+                                  type="month"
+                                  value={draft.period}
+                                  onChange={(event) =>
+                                    updateUploadDraft(draft.id, {
+                                      period: event.target.value,
+                                    })
+                                  }
+                                  disabled={!financial}
+                                  required={financial}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                className="remove-button"
+                                aria-label={`Remover ${draft.file.name}`}
+                                onClick={() => removeUploadDraft(draft.id)}
+                              >
+                                Remover
+                              </button>
+                              {problems.length > 0 ? (
+                                <ul className="upload-errors">
+                                  {problems.map((problem) => (
+                                    <li key={problem}>{problem}</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div className="upload-ok">
+                                  Pronto para enviar
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        className="primary-button batch-submit"
+                        onClick={uploadDocuments}
+                        disabled={!!busy || final || uploadHasErrors}
+                      >
+                        {busy === "upload"
+                          ? "Enviando e conferindo…"
+                          : `Enviar ${uploadDrafts.length} documento${uploadDrafts.length === 1 ? "" : "s"}`}
+                      </button>
+                    </div>
                   )}
-                  <label className="file-label">
-                    PDF
-                    <input
-                      id="document-file"
-                      type="file"
-                      accept="application/pdf,.pdf"
-                      onChange={(event) =>
-                        setFile(event.target.files?.[0] || null)
-                      }
-                      disabled={final}
-                      required
-                    />
-                  </label>
-                  <button
-                    disabled={!!busy || final || !file}
-                    className="primary-button"
-                    type="submit"
+                </div>
+
+                {hasFinancialDocuments && (
+                  <div
+                    className={`readiness-card ${financialCoverage.complete ? "is-ready" : "is-partial"}`}
                   >
-                    {busy === "upload" ? "Enviando…" : "Enviar documento"}
-                  </button>
-                </form>
-                {documents.length > 0 && (
+                    <div className="readiness-heading">
+                      <div>
+                        <span className="eyebrow">COBERTURA DOCUMENTAL</span>
+                        <h3>
+                          {financialCoverage.complete
+                            ? "Pronto para análise completa"
+                            : "A análise ainda será parcial"}
+                        </h3>
+                      </div>
+                      <span className="readiness-pill">
+                        {financialCoverage.complete ? "Completo" : "Incompleto"}
+                      </span>
+                    </div>
+                    <div className="coverage-grid">
+                      <div>
+                        <strong>
+                          {Math.min(financialCoverage.payslipPeriods.length, 3)}
+                          /3
+                        </strong>
+                        <span>Contracheques</span>
+                        <small>
+                          {formatPeriods(financialCoverage.payslipPeriods)}
+                        </small>
+                      </div>
+                      <div>
+                        <strong>
+                          {Math.min(
+                            financialCoverage.statementPeriods.length,
+                            3,
+                          )}
+                          /3
+                        </strong>
+                        <span>Extratos</span>
+                        <small>
+                          {formatPeriods(financialCoverage.statementPeriods)}
+                        </small>
+                      </div>
+                      <div>
+                        <strong>
+                          {Math.min(financialCoverage.matchedPeriods.length, 3)}
+                          /3
+                        </strong>
+                        <span>Meses conciliáveis</span>
+                        <small>
+                          {formatPeriods(financialCoverage.matchedPeriods)}
+                        </small>
+                      </div>
+                    </div>
+                    {!financialCoverage.complete && (
+                      <p>
+                        Você ainda pode executar uma análise parcial, mas renda,
+                        conciliação e capacidade poderão ficar como não
+                        avaliadas.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {latestDocuments.length > 0 && (
                   <div className="document-list">
-                    {documents.map((document) => (
+                    <div className="list-heading">
+                      <strong>Documentos atuais</strong>
+                      <small>Uma linha por tipo e competência</small>
+                    </div>
+                    {latestDocuments.map((document) => (
                       <div className="document-item" key={document.id}>
                         <div className="doc-icon">PDF</div>
                         <div>
@@ -852,6 +1107,35 @@ export default function App() {
                         {badge(document.status)}
                       </div>
                     ))}
+                    {historicalDocuments.length > 0 && (
+                      <details className="history-details">
+                        <summary>
+                          Ver {historicalDocuments.length} versão
+                          {historicalDocuments.length === 1
+                            ? " anterior"
+                            : "ões anteriores"}
+                        </summary>
+                        {historicalDocuments.map((document) => (
+                          <div
+                            className="document-item historical"
+                            key={document.id}
+                          >
+                            <div className="doc-icon">PDF</div>
+                            <div>
+                              <strong>
+                                {documentLabel(document.type)}
+                                {document.period ? ` · ${document.period}` : ""}
+                              </strong>
+                              <small>
+                                v{document.version} ·{" "}
+                                {date(document.uploadedAt)} · SHA-256{" "}
+                                {document.sha256.slice(0, 12)}…
+                              </small>
+                            </div>
+                          </div>
+                        ))}
+                      </details>
+                    )}
                   </div>
                 )}
               </section>
@@ -869,127 +1153,172 @@ export default function App() {
                   </div>
                   {analysis && badge(analysis.status)}
                 </div>
-                <div className="action-row">
+                <div
+                  className={`analysis-start ${financialCoverage.complete ? "is-ready" : "is-partial"}`}
+                >
+                  <div>
+                    <span className="eyebrow">ANTES DE ANALISAR</span>
+                    <h3>
+                      {financialCoverage.complete
+                        ? "Conjunto completo e conciliável"
+                        : documents.length > 0
+                          ? "Resultado parcial esperado"
+                          : "Envie pelo menos um documento"}
+                    </h3>
+                    <p>
+                      {financialCoverage.complete
+                        ? `Três competências conferidas: ${formatPeriods(financialCoverage.matchedPeriods.slice(0, 3))}.`
+                        : documents.length > 0
+                          ? "O sistema preservará campos ausentes como não avaliados; nenhuma informação será inventada."
+                          : "A análise fica disponível depois que a proposta recebe documentos."}
+                    </p>
+                  </div>
                   <button
-                    disabled={!!busy || final}
+                    disabled={
+                      !!busy ||
+                      final ||
+                      documents.length === 0 ||
+                      uploadDrafts.length > 0
+                    }
                     onClick={analyze}
                     className="primary-button"
                   >
-                    {busy === "analysis" ? "Analisando…" : "Executar análise →"}
+                    {busy === "analysis"
+                      ? "Analisando…"
+                      : financialCoverage.complete
+                        ? "Analisar documentos →"
+                        : "Executar análise parcial →"}
                   </button>
-                  <form onSubmit={loadAnalysis} className="inline-form">
-                    <input
-                      name="analysisId"
-                      placeholder="ID de análise anterior"
-                      aria-label="ID de análise anterior"
-                      required
-                    />
-                    <button disabled={!!busy} className="secondary-button">
-                      Abrir dossiê
-                    </button>
-                  </form>
                 </div>
-                {documents.some(
-                  (item) =>
-                    item.type === "PAYSLIP" || item.type === "BANK_STATEMENT",
-                ) && (
-                  <div className="action-row">
-                    <label>
-                      Caso sintético de bureau
-                      <select
-                        value={bureauCase}
-                        onChange={(event) => setBureauCase(event.target.value)}
-                        disabled={!!busy || final}
-                      >
-                        <option value="COMPLETE">Completo</option>
-                        <option value="CLEAN">
-                          Sem apontamentos no cenário
-                        </option>
-                        <option value="UNAVAILABLE">Indisponível</option>
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={consultBureau}
-                      disabled={!!busy || final}
-                    >
-                      {busy === "bureau"
-                        ? "Consultando…"
-                        : "Consultar bureau sintético"}
-                    </button>
-                    <small>
-                      Modo local por padrão. A integração homologada só é usada
-                      quando configurada no Compose.
-                    </small>
+
+                <details className="advanced-options">
+                  <summary>Opções avançadas e dossiês anteriores</summary>
+                  <div className="advanced-content">
+                    <form onSubmit={loadAnalysis} className="inline-form">
+                      <input
+                        name="analysisId"
+                        placeholder="ID de análise anterior"
+                        aria-label="ID de análise anterior"
+                        required
+                      />
+                      <button disabled={!!busy} className="secondary-button">
+                        Abrir dossiê
+                      </button>
+                    </form>
+                    {hasFinancialDocuments && (
+                      <>
+                        <div className="action-row">
+                          <label>
+                            Caso sintético de bureau
+                            <select
+                              value={bureauCase}
+                              onChange={(event) =>
+                                setBureauCase(event.target.value)
+                              }
+                              disabled={!!busy || final}
+                            >
+                              <option value="COMPLETE">Completo</option>
+                              <option value="CLEAN">
+                                Sem apontamentos no cenário
+                              </option>
+                              <option value="UNAVAILABLE">Indisponível</option>
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={consultBureau}
+                            disabled={!!busy || final}
+                          >
+                            {busy === "bureau"
+                              ? "Consultando…"
+                              : "Consultar bureau sintético"}
+                          </button>
+                        </div>
+                        <small>
+                          Modo local por padrão. A integração homologada só é
+                          usada quando configurada no Compose.
+                        </small>
+                        <div className="form-row">
+                          <label>
+                            Valor solicitado (BRL, opcional)
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={principal}
+                              onChange={(event) =>
+                                setPrincipal(event.target.value)
+                              }
+                            />
+                          </label>
+                          <label>
+                            Prazo em meses
+                            <input
+                              type="number"
+                              min="1"
+                              max="600"
+                              value={termMonths}
+                              onChange={(event) =>
+                                setTermMonths(event.target.value)
+                              }
+                            />
+                          </label>
+                          <label>
+                            Taxa mensal fictícia (%)
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={monthlyRatePercent}
+                              onChange={(event) =>
+                                setMonthlyRatePercent(event.target.value)
+                              }
+                            />
+                          </label>
+                        </div>
+                      </>
+                    )}
                   </div>
-                )}
-                {documents.some(
-                  (item) =>
-                    item.type === "PAYSLIP" || item.type === "BANK_STATEMENT",
-                ) && (
-                  <div className="form-row">
-                    <label>
-                      Valor solicitado (BRL, opcional)
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={principal}
-                        onChange={(event) => setPrincipal(event.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Prazo em meses
-                      <input
-                        type="number"
-                        min="1"
-                        max="600"
-                        value={termMonths}
-                        onChange={(event) => setTermMonths(event.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Taxa mensal fictícia (%)
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={monthlyRatePercent}
-                        onChange={(event) =>
-                          setMonthlyRatePercent(event.target.value)
-                        }
-                      />
-                    </label>
-                  </div>
-                )}
+                </details>
                 {analysis && (
                   <div className="dossier">
-                    <div className="dossier-meta">
-                      <div>
-                        <small>ANÁLISE</small>
-                        <code>{analysis.analysisId}</code>
+                    <details className="execution-details">
+                      <summary>Detalhes da execução e rastreabilidade</summary>
+                      <div className="dossier-meta">
+                        <div>
+                          <small>ANÁLISE</small>
+                          <code>{analysis.analysisId}</code>
+                        </div>
+                        <div>
+                          <small>POLÍTICA</small>
+                          <strong>{analysis.policyVersion}</strong>
+                        </div>
+                        <div>
+                          <small>TENTATIVA</small>
+                          <strong>{analysis.attempt}</strong>
+                        </div>
+                        <div>
+                          <small>SNAPSHOT</small>
+                          <code>
+                            {analysis.documentSnapshotHash.slice(0, 14)}…
+                          </code>
+                        </div>
                       </div>
-                      <div>
-                        <small>POLÍTICA</small>
-                        <strong>{analysis.policyVersion}</strong>
-                      </div>
-                      <div>
-                        <small>TENTATIVA</small>
-                        <strong>{analysis.attempt}</strong>
-                      </div>
-                      <div>
-                        <small>SNAPSHOT</small>
-                        <code>
-                          {analysis.documentSnapshotHash.slice(0, 14)}…
-                        </code>
-                      </div>
-                    </div>
-                    {analysis.errorCode && (
-                      <div className="message error">
-                        Falha: {analysis.errorCode}. Uma falha recuperável pode
-                        ser reprocessada.
+                    </details>
+                    {analysisFailure && (
+                      <div className="analysis-failure" role="alert">
+                        <div>
+                          <strong>{analysisFailure.title}</strong>
+                          <p>{analysisFailure.message}</p>
+                        </div>
+                        <details>
+                          <summary>Detalhes técnicos</summary>
+                          <code>
+                            {analysis.status} · {analysis.errorCode}
+                          </code>
+                        </details>
                       </div>
                     )}
                     {analysis.financialAssessment && (
@@ -1151,81 +1480,103 @@ export default function App() {
                         <ul>
                           {analysis.financialAssessment.limitations.map(
                             (item) => (
-                              <li key={item}>{item}</li>
+                              <li key={item}>
+                                {limitationLabels[item] ?? item}
+                              </li>
                             ),
                           )}
                         </ul>
                       </div>
                     )}
-                    <div className="dossier-grid">
-                      <div>
-                        <h3>Fatos extraídos</h3>
-                        {analysis.extractedFields.length ? (
-                          analysis.extractedFields.map((field) => (
-                            <div
-                              className="evidence-card"
-                              key={`${field.documentId}-${field.fieldName}`}
-                            >
-                              <div className="card-head">
-                                <strong>
-                                  {fieldLabels[field.fieldName] ??
-                                    field.fieldName}
-                                </strong>
-                                {badge(field.extractionStatus)}
-                              </div>
-                              <div className="fact-value">
-                                {field.value
-                                  ? field.currency === "BRL"
-                                    ? money(Number(field.value))
-                                    : field.value
-                                  : "Sem valor factual"}
-                              </div>
-                              {field.evidenceRef ? (
-                                <div className="fact-source">
-                                  <small>
-                                    Página {field.page} ·{" "}
-                                    {documentLabel(
-                                      analysis.documents.find(
-                                        (document) =>
-                                          document.documentId ===
-                                          field.documentId,
-                                      )?.type ?? "INCOME_PROOF",
-                                    )}
-                                  </small>
-                                  <details>
-                                    <summary>Referência técnica</summary>
-                                    <code>{field.evidenceRef}</code>
-                                  </details>
+                    <div className="result-sections">
+                      <details className="result-details">
+                        <summary>
+                          <span>Fatos extraídos</span>
+                          <strong>
+                            {analysis.extractedFields.length} campos
+                          </strong>
+                        </summary>
+                        <div className="result-details-content">
+                          {analysis.extractedFields.length ? (
+                            analysis.extractedFields.map((field) => (
+                              <div
+                                className="evidence-card"
+                                key={`${field.documentId}-${field.fieldName}`}
+                              >
+                                <div className="card-head">
+                                  <strong>
+                                    {fieldLabels[field.fieldName] ??
+                                      field.fieldName}
+                                  </strong>
+                                  {badge(field.extractionStatus)}
                                 </div>
-                              ) : (
-                                <small>Sem evidência validada</small>
-                              )}
-                              {field.snippet && (
-                                <blockquote>{field.snippet}</blockquote>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="empty-state">
-                            Nenhum campo extraído neste snapshot.
+                                <div className="fact-value">
+                                  {field.value
+                                    ? field.currency === "BRL"
+                                      ? money(Number(field.value))
+                                      : field.value
+                                    : "Sem valor factual"}
+                                </div>
+                                {field.evidenceRef ? (
+                                  <div className="fact-source">
+                                    <small>
+                                      Página {field.page} ·{" "}
+                                      {documentLabel(
+                                        analysis.documents.find(
+                                          (document) =>
+                                            document.documentId ===
+                                            field.documentId,
+                                        )?.type ?? "INCOME_PROOF",
+                                      )}
+                                    </small>
+                                    <details>
+                                      <summary>Referência técnica</summary>
+                                      <code>{field.evidenceRef}</code>
+                                    </details>
+                                  </div>
+                                ) : (
+                                  <small>Sem evidência validada</small>
+                                )}
+                                {field.snippet && (
+                                  <blockquote>{field.snippet}</blockquote>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <p className="empty-state">
+                              Nenhum campo extraído neste snapshot.
+                            </p>
+                          )}
+                        </div>
+                      </details>
+                      <details
+                        className="result-details"
+                        open={findingReviewCount > 0}
+                      >
+                        <summary>
+                          <span>Verificações da análise</span>
+                          <strong>
+                            {findingPassCount} conformes
+                            {findingReviewCount > 0
+                              ? ` · ${findingReviewCount} para revisar`
+                              : ""}
+                          </strong>
+                        </summary>
+                        <div className="result-details-content">
+                          <p className="finding-intro">
+                            Confira o motivo, os valores e a evidência de cada
+                            item. Estes sinais apoiam sua revisão; a decisão
+                            continua humana.
                           </p>
-                        )}
-                      </div>
-                      <div>
-                        <h3>O que encontramos</h3>
-                        <p className="finding-intro">
-                          Confira o motivo, os valores e a evidência de cada
-                          item. Estes sinais apoiam sua revisão; a decisão
-                          continua humana.
-                        </p>
-                        {analysis.findings.map((finding) => (
-                          <FindingCard
-                            key={finding.code}
-                            finding={finding}
-                            analysis={analysis}
-                          />
-                        ))}
-                      </div>
+                          {analysis.findings.map((finding) => (
+                            <FindingCard
+                              key={finding.code}
+                              finding={finding}
+                              analysis={analysis}
+                            />
+                          ))}
+                        </div>
+                      </details>
                     </div>
                     <div className="ai-card">
                       <div className="card-head">

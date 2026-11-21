@@ -55,3 +55,31 @@ Reproduzir o fluxo como uma pessoa analista: entrar, criar uma proposta, selecio
 ## Conclusao
 
 O motor protegeu a integridade ao rejeitar a extracao inconsistente. O problema principal esta na jornada: ela permite produzir o estado invalido, nao o sinaliza antes da analise e responde com terminologia contraditoria. A percepcao de fluxo confuso e complexo foi confirmada pelo teste manual.
+
+## Correcao implementada e revalidada
+
+**Proposta limpa:** `65920432-eb63-427c-8cc6-5508a1d712d5`
+**Analise concluida:** `e12c287f-1716-4bd7-b7c3-4c092aa92bd3`
+
+- Os seis PDFs foram selecionados em uma unica acao.
+- A grade detectou corretamente contracheques e extratos de `2026-08`, `2026-09` e `2026-10`.
+- Todos os itens ficaram visiveis para revisao antes do envio.
+- Duplicatas, conflitos entre nome/tipo/competencia, arquivos nao PDF e tamanho acima de 10 MiB agora bloqueiam o lote com mensagem por arquivo.
+- O preflight mostrou `3/3` contracheques, `3/3` extratos e `3/3` meses conciliaveis antes de liberar a analise completa.
+- A analise terminou `COMPLETED`, com renda liquida media de R$ 7.733,33, tres conciliacoes `MATCH`, capacidade teorica de R$ 2.706,67 e IA claramente identificada como `MOCK`.
+- Criacao/retomada de proposta, opcoes avancadas, rastreabilidade, fatos e verificacoes tecnicas foram recolhidos progressivamente para reduzir o comprimento e a carga visual da pagina.
+- Erros permanentes e temporarios agora possuem mensagens operacionais diferentes; codigos internos ficam em detalhes tecnicos.
+
+## Regressao apos a correcao
+
+| Gate | Resultado |
+|---|---|
+| Frontend unitario | 5/5 testes da fila, inferencia, duplicidade, cobertura, versao atual e falha permanente. |
+| Frontend estatico | ESLint, TypeScript/Vite e Prettier aprovados. |
+| Java | 23/23 testes aprovados. |
+| Python | 10/10 testes e Ruff aprovados. |
+| OpenSpec | 10/10 specs aprovadas em modo estrito. |
+| Smokes | Proposta, documentos, analise, financeiro, bureau, idempotencia, snapshot e decisao aprovados. |
+| E2E UI | Selecao unica de seis PDFs, revisao da grade, upload, preflight completo e dossie concluido. |
+
+**Classificacao final:** PASS.
