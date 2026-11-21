@@ -101,6 +101,9 @@ def explain_with_bedrock(request: ExplainRequest) -> ExplainResponse:
               "for every findingCode supplied; do not omit a finding or add another code. Use only supplied "
               "finding codes and references. Hypotheses are optional, must be clearly uncertain, must use only "
               "allowed transaction/evidence references, and must have reviewStatus PENDING_HUMAN_REVIEW. "
+              "If you cannot produce every hypothesis field exactly, return hypotheses as an empty array. "
+              "Each hypothesis, when present, must contain type, description, transactionRefs, evidenceRefs, reason, "
+              "and reviewStatus. Each explanation must contain all four fields even when a list is empty. "
               "Never recommend approval or rejection. Keep the summary and messages concise and in Brazilian Portuguese.")
     try:
         client = boto3.client("bedrock-runtime", region_name=region)
@@ -108,11 +111,11 @@ def explain_with_bedrock(request: ExplainRequest) -> ExplainResponse:
             modelId=model_id,
             system=[{"text": system}],
             messages=[{"role": "user", "content": [{"text": json.dumps(prompt_data, ensure_ascii=False)}]}],
-            inferenceConfig={"maxTokens": 400, "temperature": 0},
+            inferenceConfig={"maxTokens": 2000, "temperature": 0},
         )
         content = result["output"]["message"]["content"]
         raw = next(block["text"] for block in content if "text" in block)
-        parsed = json.loads(raw)
+        parsed = _parse_bedrock_json(raw)
         generated = [FindingExplanation.model_validate(item) for item in parsed["explanations"]]
         generated_by_code = {item.findingCode: item for item in generated}
         if len(generated) != len(request.findings) or set(generated_by_code) != {finding.code for finding in request.findings}:
@@ -137,3 +140,40 @@ def explain_with_bedrock(request: ExplainRequest) -> ExplainResponse:
     except Exception as exc:
         logger.warning("Bedrock explanation failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Bedrock explanation unavailable or invalid") from exc
+
+
+def _parse_bedrock_json(raw: str) -> dict:
+    """Accept JSON returned directly or inside a markdown/prose wrapper.
+
+    Some Bedrock chat models wrap an otherwise valid contract in a fenced code
+    block or a short preamble. The contract is still validated below by the
+    Pydantic models and by the finding/reference checks.
+    """
+    candidate = raw.strip()
+    if candidate.startswith("```"):
+        lines = candidate.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        candidate = "\n".join(lines).strip()
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        parsed = None
+        for start, char in enumerate(candidate):
+            if char != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(candidate[start:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict) and "explanations" in value:
+                parsed = value
+                break
+        if parsed is None:
+            raise
+    if not isinstance(parsed, dict):
+        raise ValueError("Bedrock response must be a JSON object")
+    return parsed

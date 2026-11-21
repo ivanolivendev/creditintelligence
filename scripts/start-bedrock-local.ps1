@@ -1,6 +1,7 @@
 param(
     [string] $Profile = 'bedrock',
-    [string] $Region = 'us-east-1'
+    [string] $Region = 'us-east-1',
+    [string] $ModelId = 'deepseek.v3.2'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,7 +17,7 @@ try {
     $lines = @(
         'AI_PROVIDER=bedrock',
         "AWS_REGION=$Region",
-        'BEDROCK_MODEL_ID=qwen.qwen3-next-80b-a3b',
+        "BEDROCK_MODEL_ID=$ModelId",
         "AWS_ACCESS_KEY_ID=$($session.Credentials.AccessKeyId)",
         "AWS_SECRET_ACCESS_KEY=$($session.Credentials.SecretAccessKey)",
         "AWS_SESSION_TOKEN=$($session.Credentials.SessionToken)"

@@ -171,17 +171,17 @@ def test_bedrock_explanation_uses_constrained_schema(monkeypatch: pytest.MonkeyP
 
     class FakeBedrock:
         def converse(self, **kwargs):
-            assert kwargs["inferenceConfig"]["maxTokens"] == 400
+            assert kwargs["inferenceConfig"]["maxTokens"] == 2000
             assert kwargs["inferenceConfig"]["temperature"] == 0
             prompt = json.loads(kwargs["messages"][0]["content"][0]["text"])
             assert [finding["code"] for finding in prompt["findings"]] == [
                 "INCOME_CONSISTENCY", "REQUIRED_DOCUMENTS"]
             return {"output": {"message": {"content": [{"text":
-                '{"summary":"Revisão necessária.","explanations":[{"findingCode":"INCOME_CONSISTENCY",'
+                '```json\n{"summary":"Revisão necessária.","explanations":[{"findingCode":"INCOME_CONSISTENCY",'
                 '"message":"A variação excede o limite.","policyReferences":["POLICY-1.0:INCOME_CONSISTENCY"],'
                 '"evidenceReferences":["doc:v1:p1:income"]},{"findingCode":"REQUIRED_DOCUMENTS",'
                 '"message":"Os documentos foram encontrados.","policyReferences":["POLICY-1.0:REQUIRED_DOCUMENTS"],'
-                '"evidenceReferences":[]}],"hypotheses":[],"limitations":[]}'}]}}}
+                '"evidenceReferences":[]}],"hypotheses":[],"limitations":[]}\n```'}]}}}
 
     monkeypatch.setattr(main.boto3, "client", lambda *args, **kwargs: FakeBedrock())
     payload = {"contractVersion": "1.0", "analysisId": str(uuid4()),
