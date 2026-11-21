@@ -10,6 +10,7 @@
 **/dist/
 **/*.tsbuildinfo
 tmp/
+documentos-para-analise/
 *.log
 .idea/
 .vscode/
