@@ -14,10 +14,16 @@ $body = @{
     currency = 'BRL'
 } | ConvertTo-Json -Depth 4
 $proposal = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/proposals" -Headers $headers -ContentType 'application/json' -Body $body
-$fixture = (Resolve-Path (Join-Path $PSScriptRoot '../fixtures/documents/income-proof-demo.pdf')).Path
 $documentsUrl = "$BaseUrl/api/v1/proposals/$($proposal.id)/documents"
-$document = (& curl.exe --silent --show-error --user "${Username}:${Password}" --form 'type=INCOME_PROOF' --form "file=@$fixture;type=application/pdf" $documentsUrl) | ConvertFrom-Json
-if (-not $document.id) { throw 'Synthetic fixture upload failed' }
+$bureau = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/proposals/$($proposal.id)/bureau-consultations" -Headers $headers -ContentType 'application/json' -Body '{"caseName":"COMPLETE"}'
+if ($bureau.report.status -ne 'AVAILABLE') { throw 'Bureau consultation was not available' }
+foreach ($month in @('2026-08', '2026-09', '2026-10')) {
+    foreach ($entry in @(@('PAYSLIP', 'payslip'), @('BANK_STATEMENT', 'statement'))) {
+        $fixture = (Resolve-Path (Join-Path $PSScriptRoot "../fixtures/documents/$($entry[1])-$month-demo.pdf")).Path
+        $document = (& curl.exe --silent --show-error --user "${Username}:${Password}" --form "type=$($entry[0])" --form "period=$month" --form "file=@$fixture;type=application/pdf" $documentsUrl) | ConvertFrom-Json
+        if (-not $document.id) { throw "Synthetic fixture upload failed for $month/$($entry[0])" }
+    }
+}
 $analysis = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/v1/proposals/$($proposal.id)/analyses" -Headers $headers
 if ($analysis.status -ne 'COMPLETED' -or $analysis.aiExplanationStatus -ne 'AVAILABLE' -or
     $analysis.aiExplanation.provider -ne 'BEDROCK' -or

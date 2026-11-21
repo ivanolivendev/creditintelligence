@@ -174,11 +174,14 @@ def test_bedrock_explanation_uses_constrained_schema(monkeypatch: pytest.MonkeyP
             assert kwargs["inferenceConfig"]["maxTokens"] == 400
             assert kwargs["inferenceConfig"]["temperature"] == 0
             prompt = json.loads(kwargs["messages"][0]["content"][0]["text"])
-            assert [finding["code"] for finding in prompt["findings"]] == ["INCOME_CONSISTENCY"]
+            assert [finding["code"] for finding in prompt["findings"]] == [
+                "INCOME_CONSISTENCY", "REQUIRED_DOCUMENTS"]
             return {"output": {"message": {"content": [{"text":
                 '{"summary":"Revisão necessária.","explanations":[{"findingCode":"INCOME_CONSISTENCY",'
                 '"message":"A variação excede o limite.","policyReferences":["POLICY-1.0:INCOME_CONSISTENCY"],'
-                '"evidenceReferences":["doc:v1:p1:income"]}]}'}]}}}
+                '"evidenceReferences":["doc:v1:p1:income"]},{"findingCode":"REQUIRED_DOCUMENTS",'
+                '"message":"Os documentos foram encontrados.","policyReferences":["POLICY-1.0:REQUIRED_DOCUMENTS"],'
+                '"evidenceReferences":[]}],"hypotheses":[],"limitations":[]}'}]}}}
 
     monkeypatch.setattr(main.boto3, "client", lambda *args, **kwargs: FakeBedrock())
     payload = {"contractVersion": "1.0", "analysisId": str(uuid4()),
@@ -199,15 +202,24 @@ def test_bedrock_explanation_uses_constrained_schema(monkeypatch: pytest.MonkeyP
     assert [item["findingCode"] for item in response.json()["explanations"]] == [
         "INCOME_CONSISTENCY", "REQUIRED_DOCUMENTS"]
     assert response.json()["explanations"][1]["policyReferences"] == ["POLICY-1.0:REQUIRED_DOCUMENTS"]
-    assert "Required document present" in response.json()["explanations"][1]["message"]
+    assert "documentos" in response.json()["explanations"][1]["message"]
 
 
-def test_bedrock_skips_call_when_all_findings_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_bedrock_calls_model_when_all_findings_pass(monkeypatch: pytest.MonkeyPatch) -> None:
     from app import main
 
     monkeypatch.setenv("INTERNAL_SERVICE_TOKEN", "synthetic-test-token")
     monkeypatch.setenv("AI_PROVIDER", "bedrock")
-    monkeypatch.setattr(main.boto3, "client", lambda *args, **kwargs: pytest.fail("unexpected Bedrock call"))
+    class FakeBedrock:
+        def converse(self, **kwargs):
+            prompt = json.loads(kwargs["messages"][0]["content"][0]["text"])
+            assert [finding["result"] for finding in prompt["findings"]] == ["PASS"]
+            return {"output": {"message": {"content": [{"text":
+                '{"summary":"Tudo conforme.","explanations":[{"findingCode":"REQUIRED_DOCUMENTS",'
+                '"message":"Os documentos atendem à regra.","policyReferences":["POLICY-1.0:REQUIRED_DOCUMENTS"],'
+                '"evidenceReferences":[]}],"hypotheses":[],"limitations":[]}'}]}}}
+
+    monkeypatch.setattr(main.boto3, "client", lambda *args, **kwargs: FakeBedrock())
     payload = {"contractVersion": "1.0", "analysisId": str(uuid4()),
                "policyVersion": "POLICY-1.0", "policyChecksum": "synthetic-checksum",
                "policyText": "POLICY-1.0: Synthetic policy",
@@ -218,5 +230,5 @@ def test_bedrock_skips_call_when_all_findings_pass(monkeypatch: pytest.MonkeyPat
     response = TestClient(app).post("/internal/v1/explain", json=payload,
                                    headers={"X-Internal-Token": "synthetic-test-token"})
     assert response.status_code == 200
-    assert response.json()["provider"] == "MOCK"
+    assert response.json()["provider"] == "BEDROCK"
     assert response.json()["explanations"][0]["policyReferences"] == ["POLICY-1.0:REQUIRED_DOCUMENTS"]

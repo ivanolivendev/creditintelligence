@@ -36,3 +36,5 @@ bureau:
   mode: ${BUREAU_MODE:mock}
   sandbox-token: ${BUREAU_SANDBOX_TOKEN:}
   url: ${BUREAU_SANDBOX_URL:https://api.consultcenter.com.br}
+ai:
+  provider: ${AI_PROVIDER:mock}

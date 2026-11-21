@@ -123,6 +123,15 @@ public class AnalysisService {
         var snapshot = documents.snapshot(proposalId);
         var financial = snapshot.stream().anyMatch(document -> document.period() != null);
         var bureauSnapshot = financial ? bureau.latest(proposalId) : null;
+        if (financial && !hasCompleteFinancialCoverage(snapshot)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Financial analysis requires three matching payslip and bank statement periods");
+        }
+        if (financial && (bureauSnapshot == null || bureauSnapshot.id() == null
+                || !"AVAILABLE".equals(bureauSnapshot.report().status()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A successful bureau consultation is required before financial analysis");
+        }
         var policy = financial ? policies.financial() : policies.current();
         if (!financial && requestedScenario != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -181,6 +190,17 @@ public class AnalysisService {
         return new Start(id, lease, snapshot, policy, scenario, financial, bureauSnapshot, true);
     }
 
+    private boolean hasCompleteFinancialCoverage(List<DocumentSnapshotRef> snapshot) {
+        var payslips = new HashSet<String>();
+        var statements = new HashSet<String>();
+        for (var document : snapshot) {
+            if (document.period() == null) continue;
+            if (document.type().name().equals("PAYSLIP")) payslips.add(document.period());
+            if (document.type().name().equals("BANK_STATEMENT")) statements.add(document.period());
+        }
+        return payslips.size() == 3 && statements.size() == 3 && payslips.equals(statements);
+    }
+
     private Start reuseOrRetry(AnalysisEntity analysis, List<DocumentSnapshotRef> snapshot,
             PolicySnapshot policy, Scenario scenario, boolean financial,
             BureauService.Snapshot bureauSnapshot) {
@@ -214,7 +234,7 @@ public class AnalysisService {
             var profile = assembleFinancialProfile(start, extraction);
             var assessment = financialEngine.assess(profile,
                     new FinancialEngine.Policy(start.policy().commitmentLimitRatio(),
-                            start.policy().salaryMatchToleranceAbsolute(),
+                            start.policy().salaryMatchTolerancePercent(),
                             start.policy().incomeStabilityWarningRatio(), start.policy().version()),
                     start.scenario());
             data.saveFinancialAssessment(start.id(), start.policy().id(),

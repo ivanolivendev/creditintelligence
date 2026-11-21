@@ -6,7 +6,7 @@ import java.util.UUID;
 
 public record PolicySnapshot(UUID id, String version, String checksum, String text,
         BigDecimal incomeTolerancePercent, List<String> requiredDocumentTypes,
-        BigDecimal commitmentLimitRatio, BigDecimal salaryMatchToleranceAbsolute,
+        BigDecimal commitmentLimitRatio, BigDecimal salaryMatchTolerancePercent,
         BigDecimal incomeStabilityWarningRatio, int simulationTermMonths,
         BigDecimal simulationMonthlyInterestRate) {
     public PolicySnapshot(UUID id, String version, String checksum, String text,

@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -26,13 +28,21 @@ public class AIExplanationService {
     private final AnalysisDataStore data;
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
+    private final String expectedProvider;
 
+    @Autowired
     public AIExplanationService(PythonExplanationClient python, AnalysisDataStore data,
             JdbcTemplate jdbc, ObjectMapper json) {
+        this(python, data, jdbc, json, "mock");
+    }
+
+    public AIExplanationService(PythonExplanationClient python, AnalysisDataStore data,
+            JdbcTemplate jdbc, ObjectMapper json, @Value("${ai.provider:mock}") String expectedProvider) {
         this.python = python;
         this.data = data;
         this.jdbc = jdbc;
         this.json = json;
+        this.expectedProvider = expectedProvider.toUpperCase();
     }
 
     public void generate(UUID analysisId, PolicySnapshot policy, String correlationId) {
@@ -47,7 +57,8 @@ public class AIExplanationService {
         var request = new ExplainRequest("1.0", analysisId, policy.version(), policy.checksum(), policy.text(),
                 findings.stream().map(finding -> new FindingContext(finding.code(), finding.result(),
                         finding.details(), finding.evidenceRef())).toList(),
-                evidence, policyRefs, correlationId, assessment);
+                evidence, policyRefs, correlationId, assessment,
+                data.transactionReferences(analysisId));
         try {
             var response = python.explain(request);
             validate(request, response);
@@ -71,7 +82,8 @@ public class AIExplanationService {
                 try {
                     var response = json.readValue(rs.getString(5), ExplainResponse.class);
                     return new AIExplanationView(status, rs.getString(2), rs.getString(3),
-                            rs.getString(4), response.summary(), response.explanations(), response.limitations());
+                            rs.getString(4), response.summary(), response.explanations(),
+                            response.hypotheses(), response.limitations());
                 } catch (JsonProcessingException ex) {
                     throw new IllegalStateException("Stored explanation cannot be read", ex);
                 }
@@ -84,11 +96,23 @@ public class AIExplanationService {
     private void validate(ExplainRequest request, ExplainResponse response) {
         if (response == null || !"1.0".equals(response.contractVersion())
                 || !request.analysisId().equals(response.analysisId())
-                || !Set.of("MOCK", "BEDROCK").contains(response.provider()) || blank(response.modelId())
+                || !Set.of("MOCK", "BEDROCK").contains(response.provider())
+                || (!"MOCK".equals(expectedProvider) && !expectedProvider.equals(response.provider()))
+                || blank(response.modelId())
                 || blank(response.promptVersion()) || blank(response.summary())
                 || response.explanations() == null || response.limitations() == null
-                || response.explanations().size() != request.findings().size()) {
+                || response.explanations().size() != request.findings().size()
+                || response.hypotheses() == null) {
             throw new InvalidExtractionException("Invalid explanation schema");
+        }
+        for (var hypothesis : response.hypotheses()) {
+            if (hypothesis == null || blank(hypothesis.type()) || blank(hypothesis.description())
+                    || blank(hypothesis.reason()) || !"PENDING_HUMAN_REVIEW".equals(hypothesis.reviewStatus())
+                    || hypothesis.transactionRefs() == null || hypothesis.evidenceRefs() == null
+                    || !request.allowedTransactionRefs().containsAll(hypothesis.transactionRefs())
+                    || !request.allowedEvidenceRefs().containsAll(hypothesis.evidenceRefs())) {
+                throw new InvalidExtractionException("Hypothesis contains unsupported reference");
+            }
         }
         Set<String> findingCodes = new HashSet<>();
         for (var item : response.explanations()) {

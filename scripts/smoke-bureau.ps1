@@ -25,9 +25,13 @@ if ($first.report.environment -ne $ExpectedEnvironment -or $first.report.status 
 if ($ExpectedEnvironment -eq 'SANDBOX' -and $null -ne $first.report.restrictions) {
     throw 'Sandbox restriction count was invented'
 }
-$fixture = (Resolve-Path (Join-Path $PSScriptRoot '../fixtures/documents/payslip-2026-08-demo.pdf')).Path
-$uploaded = (& curl.exe --silent --show-error --user "${Username}:${Password}" --form 'type=PAYSLIP' --form 'period=2026-08' --form "file=@$fixture;type=application/pdf" "$base/documents") | ConvertFrom-Json
-if (-not $uploaded.id) { throw 'Synthetic payslip upload failed' }
+foreach ($month in @('2026-08', '2026-09', '2026-10')) {
+    foreach ($entry in @(@('PAYSLIP', 'payslip'), @('BANK_STATEMENT', 'statement'))) {
+        $fixture = (Resolve-Path (Join-Path $PSScriptRoot "../fixtures/documents/$($entry[1])-$month-demo.pdf")).Path
+        $uploaded = (& curl.exe --silent --show-error --user "${Username}:${Password}" --form "type=$($entry[0])" --form "period=$month" --form "file=@$fixture;type=application/pdf" "$base/documents") | ConvertFrom-Json
+        if (-not $uploaded.id) { throw "Synthetic $($entry[0]) upload failed for $month" }
+    }
+}
 $scenario = @{ principalRequested = $null; termMonths = 36; monthlyInterestRate = 0.02;
     currency = 'BRL'; pricingSource = 'MANUAL_DEMO' } | ConvertTo-Json
 $analysisHeaders = $headers.Clone()

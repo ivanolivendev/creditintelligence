@@ -78,14 +78,20 @@ class AnalysisContractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isCreated()).andReturn().getResponse();
         var proposalId = json.readTree(created.getContentAsString()).path("id").asText();
-        for (var entry : List.of("payslip", "statement")) {
-            var bytes = Files.readAllBytes(Path.of("/fixtures/documents/" + entry + "-2026-08-demo.pdf"));
-            mvc.perform(multipart("/api/v1/proposals/{id}/documents", proposalId)
-                    .file(new MockMultipartFile("file", entry + ".pdf", "application/pdf", bytes))
-                    .param("type", "payslip".equals(entry) ? "PAYSLIP" : "BANK_STATEMENT")
-                    .param("period", "2026-08").header("Authorization", AUTH))
-                    .andExpect(status().isCreated());
+        for (var month : List.of("2026-08", "2026-09", "2026-10")) {
+            for (var entry : List.of("payslip", "statement")) {
+                var bytes = Files.readAllBytes(Path.of("/fixtures/documents/" + entry + "-" + month + "-demo.pdf"));
+                mvc.perform(multipart("/api/v1/proposals/{id}/documents", proposalId)
+                        .file(new MockMultipartFile("file", entry + ".pdf", "application/pdf", bytes))
+                        .param("type", "payslip".equals(entry) ? "PAYSLIP" : "BANK_STATEMENT")
+                        .param("period", month).header("Authorization", AUTH))
+                        .andExpect(status().isCreated());
+            }
         }
+        mvc.perform(post("/api/v1/proposals/{id}/bureau-consultations", proposalId)
+                .header("Authorization", AUTH).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"caseName\":\"COMPLETE\"}"))
+                .andExpect(status().isOk());
         when(python.process(any(UUID.class), any(UUID.class), anyList(), anyString(), anyString()))
                 .thenAnswer(invocation -> {
                     UUID analysisId = invocation.getArgument(0);
@@ -97,7 +103,7 @@ class AnalysisContractIntegrationTest {
                             return new PythonDocumentClient.DocumentResult(ref.id(), ref.version(), List.of());
                         }
                         var invented = new PythonDocumentClient.ExtractedTransaction(ref.id(), ref.version(),
-                                "tx1", "2026-08-28", "CREDIT", "7300.00", "BRL", "SALARIO DEMO",
+                                "tx-" + ref.period(), ref.period() + "-28", "CREDIT", "7300.00", "BRL", "SALARIO DEMO",
                                 "POSSIBLE_SALARY", "invented-reference", 1, "Synthetic snippet");
                         return new PythonDocumentClient.DocumentResult(ref.id(), ref.version(),
                                 List.of(), List.of(invented));

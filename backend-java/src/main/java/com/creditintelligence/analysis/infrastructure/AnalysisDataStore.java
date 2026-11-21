@@ -12,6 +12,7 @@ import java.time.ZoneOffset;
 import org.springframework.dao.EmptyResultDataAccessException;
 import java.util.List;
 import java.util.UUID;
+import java.util.ArrayList;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -53,6 +54,24 @@ public class AnalysisDataStore {
                     }, analysisId);
         } catch (EmptyResultDataAccessException ex) {
             return null;
+        }
+    }
+
+    public List<String> transactionReferences(UUID analysisId) {
+        try {
+            return jdbc.queryForObject("SELECT profile_json::text FROM financial_assessment WHERE analysis_id = ?",
+                    (rs, row) -> {
+                        try {
+                            var root = json.readTree(rs.getString(1));
+                            var refs = new ArrayList<String>();
+                            for (var tx : root.path("bankTransactions")) refs.add(tx.path("id").asText());
+                            return refs;
+                        } catch (JsonProcessingException ex) {
+                            throw new IllegalStateException("Stored financial profile is invalid", ex);
+                        }
+                    }, analysisId);
+        } catch (EmptyResultDataAccessException ex) {
+            return List.of();
         }
     }
 

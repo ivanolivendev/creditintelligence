@@ -81,6 +81,7 @@ class ExplainRequest(BaseModel):
     allowedPolicyRefs: list[str]
     correlationId: str
     assessment: dict | None = None
+    allowedTransactionRefs: list[str] = Field(default_factory=list)
 
 
 class FindingExplanation(BaseModel):
@@ -88,6 +89,15 @@ class FindingExplanation(BaseModel):
     message: str
     policyReferences: list[str]
     evidenceReferences: list[str]
+
+
+class Hypothesis(BaseModel):
+    type: str
+    description: str
+    transactionRefs: list[str] = Field(default_factory=list)
+    evidenceRefs: list[str] = Field(default_factory=list)
+    reason: str
+    reviewStatus: Literal["PENDING_HUMAN_REVIEW"]
 
 
 class ExplainResponse(BaseModel):
@@ -98,4 +108,5 @@ class ExplainResponse(BaseModel):
     promptVersion: str = "1.0"
     summary: str
     explanations: list[FindingExplanation]
+    hypotheses: list[Hypothesis] = Field(default_factory=list)
     limitations: list[str]

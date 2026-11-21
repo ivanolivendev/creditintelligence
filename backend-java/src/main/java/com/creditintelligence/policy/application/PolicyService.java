@@ -34,7 +34,7 @@ public class PolicyService {
 
     @Transactional(readOnly = true)
     public PolicySnapshot financial() {
-        return toSnapshot(repository.findByVersion("CREDIT_POLICY_DEMO_2.0")
+        return toSnapshot(repository.findByVersion("CREDIT_POLICY_DEMO_3.4")
                 .orElseThrow(() -> new IllegalStateException("No financial policy")));
     }
 
@@ -60,7 +60,7 @@ public class PolicyService {
             return new PolicySnapshot(policy.getId(), policy.getVersion(), checksum,
                     policy.getTextContent(), tolerance, requiredTypes,
                     decimalOrNull(config, "commitmentLimitRatio"),
-                    decimalOrNull(config, "salaryMatchToleranceAbsolute"),
+                    decimalOrNull(config, "salaryMatchTolerancePercent"),
                     decimalOrNull(config, "incomeStabilityWarningRatio"),
                     config.path("simulationTermMonths").asInt(),
                     decimalOrNull(config, "simulationMonthlyInterestRate"));

@@ -32,10 +32,20 @@ public class PythonExplanationClient {
     public record ExplainRequest(String contractVersion, UUID analysisId, String policyVersion,
             String policyChecksum, String policyText, List<FindingContext> findings,
             List<String> allowedEvidenceRefs, List<String> allowedPolicyRefs, String correlationId,
-            Assessment assessment) {}
+            Assessment assessment, List<String> allowedTransactionRefs) {}
     public record FindingExplanation(String findingCode, String message,
             List<String> policyReferences, List<String> evidenceReferences) {}
+    public record Hypothesis(String type, String description, List<String> transactionRefs,
+            List<String> evidenceRefs, String reason, String reviewStatus) {}
     public record ExplainResponse(String contractVersion, UUID analysisId, String provider,
             String modelId, String promptVersion, String summary,
-            List<FindingExplanation> explanations, List<String> limitations) {}
+            List<FindingExplanation> explanations, List<Hypothesis> hypotheses,
+            List<String> limitations) {
+        public ExplainResponse(String contractVersion, UUID analysisId, String provider,
+                String modelId, String promptVersion, String summary,
+                List<FindingExplanation> explanations, List<String> limitations) {
+            this(contractVersion, analysisId, provider, modelId, promptVersion, summary,
+                    explanations, List.of(), limitations);
+        }
+    }
 }

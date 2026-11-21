@@ -11,7 +11,7 @@ import com.creditintelligence.bureau.application.BureauReport;
 
 /** Deterministic calculations for synthetic documentary pre-analysis only. */
 public final class FinancialEngine {
-    public static final String RULE_VERSION = "2.0";
+    public static final String RULE_VERSION = "3.4";
     private static final MathContext PRECISION = MathContext.DECIMAL128;
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2);
 
@@ -36,7 +36,7 @@ public final class FinancialEngine {
     }
     public record Scenario(BigDecimal principalRequested, int termMonths,
             BigDecimal monthlyInterestRate, String currency, String pricingSource) {}
-    public record Policy(BigDecimal commitmentLimitRatio, BigDecimal salaryTolerance,
+    public record Policy(BigDecimal commitmentLimitRatio, BigDecimal salaryTolerancePercent,
             BigDecimal stabilityWarningRatio, String version) {}
     public record SalaryMatch(String period, BigDecimal payslipNet, BigDecimal bankCredit,
             BigDecimal difference, String status, List<String> evidenceRefs) {}
@@ -99,8 +99,11 @@ public final class FinancialEngine {
             var credit = candidates.stream().map(BankTransaction::amount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             var difference = income.net().subtract(credit).abs();
+            var differencePercent = income.net().signum() == 0 ? BigDecimal.ZERO
+                    : difference.divide(income.net(), 8, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100));
             var status = candidates.isEmpty() ? "UNKNOWN"
-                    : difference.compareTo(policy.salaryTolerance()) <= 0 ? "MATCH" : "UNMATCHED";
+                    : differencePercent.compareTo(policy.salaryTolerancePercent()) <= 0 ? "MATCH" : "UNMATCHED";
             candidates.forEach(tx -> usedTransactions.add(tx.id()));
             var refs = new ArrayList<String>();
             refs.add(income.netEvidenceRef());
@@ -115,7 +118,7 @@ public final class FinancialEngine {
                 .allMatch(match -> "MATCH".equals(match.status()));
         findings.add(new Finding("SALARY_RECONCILIATION", allMatch ? "PASS" : "WARNING",
                 "Matched periods=" + matches.stream().filter(m -> "MATCH".equals(m.status())).count()
-                        + "; expected=3; tolerance=" + policy.salaryTolerance(),
+                        + "; expected=3; tolerance=" + policy.salaryTolerancePercent() + "%",
                 matches.stream().flatMap(m -> m.evidenceRefs().stream()).distinct().toList()));
         var unknownCredits = (int) profile.bankTransactions().stream()
                 .filter(tx -> "CREDIT".equals(tx.direction()) && "UNKNOWN".equals(tx.classification())).count();

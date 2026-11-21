@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 class FinancialEngineTest {
     private final FinancialEngine engine = new FinancialEngine();
     private final FinancialEngine.Policy policy = new FinancialEngine.Policy(
-            new BigDecimal("0.35"), new BigDecimal("100.00"), new BigDecimal("0.20"),
-            "CREDIT_POLICY_DEMO_2.0");
+            new BigDecimal("0.30"), new BigDecimal("3.00"), new BigDecimal("0.20"),
+            "CREDIT_POLICY_DEMO_3.4");
 
     @Test
     void averagesThreePayslipsReconcilesCreditsAndDeduplicatesPayroll() {
@@ -58,11 +58,11 @@ class FinancialEngineTest {
         }
         var profile = new FinancialEngine.FinancialProfile(incomes, transactions, List.of());
         var zero = engine.assess(profile, policy, scenario(null, BigDecimal.ZERO));
-        assertEquals(new BigDecimal("2800.00"), zero.maxTotalInstallments());
-        assertEquals(new BigDecimal("1300.00"), zero.maxNewInstallment());
-        assertEquals(new BigDecimal("46800.00"), zero.simulation().estimatedPrincipalAtCapacity());
+        assertEquals(new BigDecimal("2400.00"), zero.maxTotalInstallments());
+        assertEquals(new BigDecimal("900.00"), zero.maxNewInstallment());
+        assertEquals(new BigDecimal("32400.00"), zero.simulation().estimatedPrincipalAtCapacity());
         var priced = engine.assess(profile, policy, scenario(null, new BigDecimal("0.02")));
-        assertEquals(new BigDecimal("33135.50"), priced.simulation().estimatedPrincipalAtCapacity());
+        assertEquals(new BigDecimal("22939.96"), priced.simulation().estimatedPrincipalAtCapacity());
     }
 
     @Test
