@@ -1,0 +1,80 @@
+%PDF-1.4
+%ACME DEMO
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Length 2909 >>
+stream
+q 0.055 0.12 0.22 rg 0 650 612 142 re f Q
+q 0.04 0.68 0.64 rg 0 644 612 6 re f Q
+1 1 1 rg BT /F2 28 Tf 48 739 Td (ACME) Tj ET
+0.82 0.88 0.94 rg BT /F1 9 Tf 49 718 Td (TECNOLOGIA E SERVICOS LTDA.  |  CNPJ 00.000.000/0000-00 \(FICTICIO\)) Tj ET
+1 1 1 rg BT /F2 19 Tf 48 675 Td (COMPROVANTE DE PAGAMENTO) Tj ET
+0.45 0.94 0.84 rg BT /F2 9 Tf 430 741 Td (DOCUMENTO FICTICIO) Tj ET
+0.82 0.88 0.94 rg BT /F1 9 Tf 430 724 Td (USO EM DEMONSTRACAO) Tj ET
+0.28 0.38 0.49 rg BT /F2 10 Tf 48 626 Td (COMPETENCIA) Tj ET
+0.12 0.18 0.25 rg BT /F2 15 Tf 48 607 Td (OUTUBRO / 2026) Tj ET
+0.28 0.38 0.49 rg BT /F2 10 Tf 390 626 Td (DATA DE PAGAMENTO) Tj ET
+0.12 0.18 0.25 rg BT /F2 15 Tf 390 607 Td (05/11/2026) Tj ET
+q 0.96 0.975 0.985 rg 40 474 532 108 re f Q
+0.04 0.55 0.52 rg BT /F2 10 Tf 56 560 Td (EMPREGADOR) Tj ET
+0.12 0.18 0.25 rg BT /F2 13 Tf 56 538 Td (ACME TECNOLOGIA E SERVICOS LTDA.) Tj ET
+0.12 0.18 0.25 rg BT /F1 10 Tf 56 518 Td (CNPJ: 00.000.000/0000-00  \(NUMERO FICTICIO\)) Tj ET
+0.12 0.18 0.25 rg BT /F1 10 Tf 56 490 Td (ENDERECO: Rua da Demonstracao, 100 - Sao Paulo/SP) Tj ET
+q 0.96 0.975 0.985 rg 40 388 532 70 re f Q
+0.04 0.55 0.52 rg BT /F2 10 Tf 56 436 Td (COLABORADOR) Tj ET
+0.12 0.18 0.25 rg BT /F2 13 Tf 56 413 Td (ALEX DEMO) Tj ET
+0.28 0.38 0.49 rg BT /F2 10 Tf 285 436 Td (MATRICULA / CARGO) Tj ET
+0.12 0.18 0.25 rg BT /F1 11 Tf 285 413 Td (AC-0001  |  ANALISTA \(DEMO\)) Tj ET
+0.38 0.45 0.53 rg BT /F1 9 Tf 56 395 Td (IDENTIFICACAO FICTICIA - SEM VALIDADE COMO DOCUMENTO REAL) Tj ET
+0.12 0.18 0.25 rg BT /F2 12 Tf 48 358 Td (DISCRIMINACAO) Tj ET
+0.12 0.18 0.25 rg BT /F2 10 Tf 395 358 Td (PROVENTOS \(R$\)) Tj ET
+0.12 0.18 0.25 rg BT /F2 10 Tf 505 358 Td (DESCONTOS) Tj ET
+q 0.82 0.86 0.90 RG 48 348 m 564 348 l S Q
+0.12 0.18 0.25 rg BT /F1 11 Tf 52 326 Td (Salario base) Tj ET
+0.12 0.18 0.25 rg BT /F1 11 Tf 414 326 Td (7.200,00) Tj ET
+0.12 0.18 0.25 rg BT /F1 11 Tf 52 302 Td (Adicional / variavel) Tj ET
+0.12 0.18 0.25 rg BT /F1 11 Tf 414 302 Td (300,00) Tj ET
+0.12 0.18 0.25 rg BT /F1 11 Tf 52 278 Td (INSS \(estimado\)) Tj ET
+0.12 0.18 0.25 rg BT /F1 11 Tf 520 278 Td (600,00) Tj ET
+0.12 0.18 0.25 rg BT /F2 11 Tf 52 247 Td (TOTAL DE PROVENTOS) Tj ET
+0.12 0.18 0.25 rg BT /F2 11 Tf 414 247 Td (7.500,00) Tj ET
+0.12 0.18 0.25 rg BT /F2 11 Tf 520 247 Td (600,00) Tj ET
+q 0.82 0.86 0.90 RG 48 236 m 564 236 l S Q
+0.04 0.55 0.52 rg BT /F2 11 Tf 52 215 Td (Renda mensal: R$ 7.500,00) Tj ET
+q 0.055 0.12 0.22 rg 40 142 532 48 re f Q
+0.82 0.88 0.94 rg BT /F2 10 Tf 56 171 Td (VALOR LIQUIDO A RECEBER) Tj ET
+1 1 1 rg BT /F2 20 Tf 390 156 Td (R$ 6.900,00) Tj ET
+0.35 0.42 0.50 rg BT /F1 9 Tf 48 108 Td (Documento ficticio criado exclusivamente para teste de software.) Tj ET
+0.35 0.42 0.50 rg BT /F1 9 Tf 48 92 Td (Dados, empresa e valores sao inventados. Nao utilizar para comprovacao de renda.) Tj ET
+0.48 0.56 0.64 rg BT /F2 8 Tf 48 54 Td (ACME DEMONSTRACAO  |  HOLERITE SEM VALIDADE LEGAL) Tj ET
+
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000020 00000 n 
+0000000069 00000 n 
+0000000126 00000 n 
+0000000262 00000 n 
+0000000359 00000 n 
+0000000461 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+3422
+%%EOF

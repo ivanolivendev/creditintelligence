@@ -1,0 +1,15 @@
+.env
+**/.env
+.bedrock.env
+**/target/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.venv/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+tmp/
+*.log
+.idea/
+.vscode/
