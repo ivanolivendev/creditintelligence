@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 import com.creditintelligence.analysis.application.AIExplanationService;
 import com.creditintelligence.analysis.application.FindingView;
@@ -30,7 +31,8 @@ class AIExplanationServiceTest {
     private final PythonExplanationClient python = mock(PythonExplanationClient.class);
     private final AnalysisDataStore data = mock(AnalysisDataStore.class);
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
-    private final AIExplanationService service = new AIExplanationService(python, data, jdbc, new ObjectMapper());
+    private final AIExplanationService service = new AIExplanationService(
+            python, data, jdbc, new ObjectMapper(), "mock");
     private final UUID analysisId = UUID.randomUUID();
     private final PolicySnapshot policy = new PolicySnapshot(UUID.randomUUID(), "POLICY-1.0", "checksum",
             "POLICY-1.0: Synthetic", new BigDecimal("5.00"), List.of("INCOME_PROOF"));
@@ -61,5 +63,38 @@ class AIExplanationServiceTest {
         verify(jdbc).update(anyString(), eq(analysisId), eq("UNAVAILABLE"),
                 isNull(), isNull(), isNull(), isNull(), any(OffsetDateTime.class), eq(3),
                 eq("DOCUMENT_INTELLIGENCE_UNAVAILABLE"), anyLong(), any(OffsetDateTime.class));
+    }
+
+    @Test
+    void retryableProviderFailureIsRetriedAndSuccessfulResponseIsPersisted() {
+        var response = new ExplainResponse("1.0", analysisId, "MOCK", "deterministic-demo-v1", "1.0",
+                "Synthetic explanation", List.of(new FindingExplanation("INCOME_CONSISTENCY",
+                "Review required", List.of("POLICY-1.0:INCOME_CONSISTENCY"), List.of())), List.of("Demo only"));
+        when(python.explain(any()))
+                .thenThrow(new PythonExplanationClient.ExplanationException("TEMPORARY", true,
+                        "synthetic outage", new RuntimeException()))
+                .thenReturn(response);
+
+        service.generate(analysisId, policy, "test");
+
+        verify(python, times(2)).explain(any());
+        verify(jdbc).update(anyString(), eq(analysisId), eq("AVAILABLE"), eq("MOCK"),
+                eq("deterministic-demo-v1"), eq("1.0"), anyString(), any(OffsetDateTime.class), eq(2),
+                isNull(), anyLong(), any(OffsetDateTime.class));
+    }
+
+    @Test
+    void duplicateFindingCodeIsRejectedAsInvalidModelOutput() {
+        var duplicate = new FindingExplanation("INCOME_CONSISTENCY", "Review required",
+                List.of("POLICY-1.0:INCOME_CONSISTENCY"), List.of());
+        when(python.explain(any())).thenReturn(new ExplainResponse("1.0", analysisId, "MOCK",
+                "deterministic-demo-v1", "1.0", "Synthetic explanation",
+                List.of(duplicate, duplicate), List.of("Demo only")));
+
+        service.generate(analysisId, policy, "test");
+
+        verify(jdbc).update(anyString(), eq(analysisId), eq("INVALID_OUTPUT"), isNull(), isNull(),
+                isNull(), isNull(), any(OffsetDateTime.class), eq(1),
+                eq("INVALID_EXPLANATION_CONTRACT"), anyLong(), any(OffsetDateTime.class));
     }
 }

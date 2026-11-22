@@ -38,10 +38,11 @@ $finding = @($analysis.findings | Where-Object code -eq 'INCOME_CONSISTENCY')[0]
 if ($analysis.status -ne 'COMPLETED' -or $analysis.policyVersion -ne 'POLICY-1.0' -or
     $income.value -ne '7500.00' -or $income.page -ne 1 -or
     $finding.result -ne 'WARNING' -or $finding.evidenceRef -ne $income.evidenceRef -or
-    $analysis.aiExplanationStatus -ne 'AVAILABLE' -or $analysis.aiExplanation.provider -ne 'MOCK') {
+    $analysis.aiExplanationStatus -ne 'AVAILABLE' -or $analysis.aiExplanation.provider -ne 'BEDROCK' -or
+    $analysis.aiExplanation.modelId -ne 'deepseek.v3.2') {
     throw "Analysis failed: status=$($analysis.status) code=$($analysis.errorCode) income=$($income.value) result=$($finding.result)"
 }
-Write-Host "T05/T07/T08/T09 PASS analysis=$($analysis.analysisId) income=$($income.value) finding=$($finding.result) AI=MOCK"
+Write-Host "T05/T07/T08/T09 PASS analysis=$($analysis.analysisId) income=$($income.value) finding=$($finding.result) AI=BEDROCK/DeepSeek"
 
 $dossier = Invoke-RestMethod -Uri "$BaseUrl/api/v1/proposals/$($proposal.id)/dossier?analysisId=$($analysis.analysisId)" -Headers $headers
 $repeated = Invoke-RestMethod -Method Post -Uri $analysisUrl -Headers $keyedHeaders

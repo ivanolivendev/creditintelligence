@@ -1,6 +1,8 @@
 .env
 **/.env
 .bedrock.env
+credenciais.txt
+BedrockAPIKey-6tlf_accessKeys.csv
 **/target/
 **/__pycache__/
 **/.pytest_cache/

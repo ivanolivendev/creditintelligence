@@ -1,6 +1,5 @@
 package com.creditintelligence.analysis.application;
 
-import com.creditintelligence.analysis.infrastructure.AnalysisDataStore;
 import com.creditintelligence.integration.documentintelligence.PythonExplanationClient;
 import com.creditintelligence.integration.documentintelligence.PythonExplanationClient.ExplanationException;
 import com.creditintelligence.integration.documentintelligence.PythonExplanationClient.ExplainRequest;
@@ -13,7 +12,6 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.concurrent.TimeUnit;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -27,18 +25,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AIExplanationService {
     private final PythonExplanationClient python;
-    private final AnalysisDataStore data;
+    private final AnalysisDataPort data;
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     private final String expectedProvider;
 
-    @Autowired
-    public AIExplanationService(PythonExplanationClient python, AnalysisDataStore data,
+    public AIExplanationService(PythonExplanationClient python, AnalysisDataPort data,
             JdbcTemplate jdbc, ObjectMapper json) {
-        this(python, data, jdbc, json, "mock");
+        this(python, data, jdbc, json, "bedrock");
     }
 
-    public AIExplanationService(PythonExplanationClient python, AnalysisDataStore data,
+    @Autowired
+    public AIExplanationService(PythonExplanationClient python, AnalysisDataPort data,
             JdbcTemplate jdbc, ObjectMapper json, @Value("${ai.provider:mock}") String expectedProvider) {
         this.python = python;
         this.data = data;

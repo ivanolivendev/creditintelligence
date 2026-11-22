@@ -40,11 +40,11 @@ if ($null -eq $assessment -or $assessment.validIncomePeriods -ne 3 -or
     $assessment.averageNetIncome -ne 7733.33 -or $assessment.unknownCredits -ne 1 -or
     @($assessment.salaryMatches | Where-Object status -eq 'MATCH').Count -ne 3 -or
     $assessment.additionalMonthlyPayments -ne 0 -or
-    $assessment.bureau.environment -ne 'MOCK' -or $assessment.bureau.status -ne 'NOT_REQUESTED' -or
-    $analysis.aiExplanation.provider -ne 'MOCK') {
+    $assessment.bureau.environment -ne 'SANDBOX' -or $assessment.bureau.status -ne 'NOT_REQUESTED' -or
+    $analysis.aiExplanation.provider -ne 'BEDROCK' -or $analysis.aiExplanation.modelId -ne 'deepseek.v3.2') {
     throw "Financial assertion failed: status=$($analysis.status) avg=$($assessment.averageNetIncome) matches=$(@($assessment.salaryMatches | Where-Object status -eq 'MATCH').Count) AI=$($analysis.aiExplanation.provider)"
 }
-Write-Host "T05-T12 PASS avg=$($assessment.averageNetIncome) matches=3 unknown=1 capacity=$($assessment.maxNewInstallment) bureau=MOCK/NOT_REQUESTED AI=MOCK"
+Write-Host "T05-T12 PASS avg=$($assessment.averageNetIncome) matches=3 unknown=1 capacity=$($assessment.maxNewInstallment) bureau=SANDBOX/NOT_REQUESTED AI=BEDROCK/DeepSeek"
 
 $dossier = Invoke-RestMethod -Uri "$BaseUrl/api/v1/proposals/$($proposal.id)/dossier?analysisId=$($analysis.analysisId)" -Headers $headers
 $repeat = Invoke-RestMethod -Method Post -Uri $analysisUrl -Headers $keyed -ContentType 'application/json' -Body $scenario

@@ -28,15 +28,29 @@ demo:
     password: ${DEMO_ANALYST_PASSWORD}
 document:
   storage:
+    mode: ${DOCUMENT_STORAGE_MODE:local}
     root: ${DOCUMENT_STORAGE_ROOT:/data/documents}
+    bucket: ${DOCUMENT_STORAGE_BUCKET:credit-documents}
+    endpoint: ${DOCUMENT_STORAGE_ENDPOINT:}
+    region: ${AWS_REGION:us-east-1}
+    access-key: ${DOCUMENT_STORAGE_ACCESS_KEY:}
+    secret-key: ${DOCUMENT_STORAGE_SECRET_KEY:}
   intelligence:
     url: ${DOCUMENT_INTELLIGENCE_URL}
     token: ${INTERNAL_SERVICE_TOKEN}
     connect-timeout-ms: ${DOCUMENT_INTELLIGENCE_CONNECT_TIMEOUT_MS:5000}
     read-timeout-ms: ${DOCUMENT_INTELLIGENCE_READ_TIMEOUT_MS:90000}
 bureau:
-  mode: ${BUREAU_MODE:mock}
+  mode: ${BUREAU_MODE:sandbox}
   sandbox-token: ${BUREAU_SANDBOX_TOKEN:}
   url: ${BUREAU_SANDBOX_URL:https://api.consultcenter.com.br}
 ai:
-  provider: ${AI_PROVIDER:mock}
+  provider: ${AI_PROVIDER:bedrock}
+analysis:
+  # PoC lease is longer than the 90 s document-service read timeout.
+  lease-duration-seconds: ${ANALYSIS_LEASE_DURATION_SECONDS:180}
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html

@@ -2,7 +2,7 @@ param(
     [string] $BaseUrl = 'http://127.0.0.1:18080',
     [string] $Username = 'analyst',
     [string] $Password = 'local_demo_only_change_me',
-    [string] $ExpectedEnvironment = 'MOCK',
+    [string] $ExpectedEnvironment = 'SANDBOX',
     [string] $SecondCase = 'CLEAN'
 )
 

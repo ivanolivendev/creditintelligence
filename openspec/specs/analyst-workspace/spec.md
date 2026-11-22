@@ -14,7 +14,11 @@ An authenticated analyst SHALL be able to create or load a synthetic proposal, u
 - **THEN** the UI shows the persisted analysis, evidence, mock explanation and recorded decision
 
 ### Requirement: Explicit uncertainty
-The UI SHALL distinguish missing or ambiguous extracted facts, deterministic findings, and the optional AI explanation. It SHALL not describe mock output as real Bedrock inference or an automated credit approval.
+The UI SHALL identify `MOCK` explanations as mock output and SHALL not label them as Bedrock inference. Actionable failures SHALL be announced with accessible status semantics.
+
+#### Scenario: Mock provider
+- **WHEN** the persisted explanation provider is `MOCK`
+- **THEN** the workspace SHALL display `MOCK` and explain that it is deterministic demonstration output
 
 #### Scenario: Ambiguous document
 - **WHEN** a PDF contains two conflicting income amounts
@@ -32,7 +36,11 @@ The analyst workspace SHALL allow a demo analyst to upload three payslips and th
 - **THEN** the workspace explains what needs review and does not present a verified capacity
 
 ### Requirement: Guided financial document intake
-The workspace SHALL allow the analyst to select multiple PDFs together, review the detected document type and period before upload, and see the current financial-document coverage before starting analysis. The UI SHALL prevent duplicate type-period slots or filename metadata conflicts from being submitted as a valid batch.
+The workspace SHALL label the financial flow ready only when the required payslip and bank-statement period sets match. It SHALL identify missing and mismatched periods before analysis.
+
+#### Scenario: Mismatched periods
+- **WHEN** three payslips and three statements are present but their period sets differ
+- **THEN** the workspace SHALL not display a ready state and SHALL identify the periods that need correction
 
 #### Scenario: Complete six-document batch
 - **WHEN** the analyst selects three payslips and three statements whose filenames identify three matching periods

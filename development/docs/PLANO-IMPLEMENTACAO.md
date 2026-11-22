@@ -1,6 +1,12 @@
+# Atualização vigente — runtime da PoC (21/11/2026)
+
+As notas históricas abaixo registram execuções anteriores e não definem mais o runtime atual. A execução vigente usa `AI_PROVIDER=bedrock` com `BEDROCK_MODEL_ID=deepseek.v3.2` e `BUREAU_MODE=sandbox`. Compose, Spring, Python e os scripts de smoke devem manter esses valores como padrão. O mock permanece somente em testes determinísticos que o selecionam explicitamente; não é fallback de execução.
+
+O bureau sandbox é uma chamada HTTP real ao ambiente de homologação do Consult Center. A resposta é marcada como `SANDBOX`; indisponibilidade ou resposta inválida não é convertida em mock.
+
 # Plano de implementação — Credit Intelligence
 
-Status: G0–G5 PASS no escopo local; Bedrock Qwen PASS; infraestrutura AWS bloqueada pela SCP `p-7gcyevpl`.
+Status: documento histórico de execução. Para o estado atual, consulte o [Blueprint V3.1](../Credit_Intelligence_Master_Blueprint_V3.docx), o [guia de execução local](../../docs/LOCAL-SETUP.md) e o [relatório E2E V3.4](../../CREDIT_INTELLIGENCE_V3_4_E2E_REPORT.md). O baseline local está operacional; a combinação atual de bureau real e Bedrock real permanece parcial, e AWS não é provisionada automaticamente.
 
 ## Localização e fontes
 

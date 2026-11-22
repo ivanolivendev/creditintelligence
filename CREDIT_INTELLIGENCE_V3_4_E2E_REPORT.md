@@ -1,3 +1,12 @@
+# Atualização de verificação — 22/11/2026
+
+- A API key exportada para o usuário `BedrockAPIKey-6tlf` foi extraída corretamente do CSV e injetada no container como `AWS_BEARER_TOKEN_BEDROCK`, sem exibição do segredo.
+- A chamada real `Converse` para `deepseek.v3.2` alcançou a AWS, mas retornou `AccessDeniedException`: a SCP organizacional `p-7gcyevpl` contém um `explicit deny` para `bedrock:CallWithBearerToken`.
+- O smoke real do Consult Center sandbox passou: consulta `SANDBOX`, dossiê versionado, stale decision `409` e nova análise.
+- O bloqueio restante do Bedrock é administrativo na organização AWS. Não há fallback para MOCK.
+- Mitigação aplicada: o Compose passou a usar as credenciais IAM tradicionais do mesmo usuário via SigV4, sem `AWS_BEARER_TOKEN_BEDROCK`.
+- Smoke real completo passou: `BEDROCK PASS`, modelo `deepseek.v3.2`, finding `WARNING`.
+
 # Credit Intelligence V3.4 E2E Report
 
 Data da execução: 21/11/2026
