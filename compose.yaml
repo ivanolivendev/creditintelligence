@@ -1,0 +1,127 @@
+name: credit-intelligence
+
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-credit_intelligence}
+      POSTGRES_USER: ${POSTGRES_USER:-credit_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_demo_only_change_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private]
+
+  document-intelligence:
+    build:
+      context: ./document-intelligence-python
+      target: runtime
+    environment:
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-qwen.qwen3-next-80b-a3b}
+      DOCUMENT_STORAGE_ROOT: /data/documents
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local_internal_token_change_me}
+    volumes:
+      - documents_data:/data/documents:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private, edge]
+
+  document-intelligence-test:
+    profiles: [test]
+    build:
+      context: ./document-intelligence-python
+      target: test
+    networks: [edge]
+
+  backend:
+    build: ./backend-java
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-credit_intelligence}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-credit_app}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-local_demo_only_change_me}
+      DEMO_ANALYST_USER: ${DEMO_ANALYST_USER:-analyst}
+      DEMO_ANALYST_PASSWORD: ${DEMO_ANALYST_PASSWORD:-local_demo_only_change_me}
+      DOCUMENT_INTELLIGENCE_URL: http://document-intelligence:8000
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      BUREAU_MODE: ${BUREAU_MODE:-mock}
+      BUREAU_SANDBOX_TOKEN: ${BUREAU_SANDBOX_TOKEN:-}
+      BUREAU_SANDBOX_URL: ${BUREAU_SANDBOX_URL:-https://api.consultcenter.com.br}
+      DOCUMENT_STORAGE_ROOT: /data/documents
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local_internal_token_change_me}
+    volumes:
+      - documents_data:/data/documents
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-18080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      document-intelligence:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "java", "-cp", "/app", "HealthCheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private, edge]
+
+  backend-test:
+    profiles: [test]
+    image: maven:3.9.9-eclipse-temurin-21
+    working_dir: /workspace
+    command: ["mvn", "-B", "-ntp", "test"]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-credit_intelligence}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-credit_app}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-local_demo_only_change_me}
+      DEMO_ANALYST_USER: ${DEMO_ANALYST_USER:-analyst}
+      DEMO_ANALYST_PASSWORD: ${DEMO_ANALYST_PASSWORD:-local_demo_only_change_me}
+      DOCUMENT_STORAGE_ROOT: /data/documents
+      DOCUMENT_INTELLIGENCE_URL: http://document-intelligence:8000
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local_internal_token_change_me}
+    volumes:
+      - ./backend-java:/workspace
+      - maven_cache:/root/.m2
+      - documents_data:/data/documents
+      - ./fixtures:/fixtures:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      document-intelligence:
+        condition: service_healthy
+    networks: [private, edge]
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-18081}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private, edge]
+
+volumes:
+  postgres_data:
+  documents_data:
+  maven_cache:
+
+networks:
+  private:
+    internal: true
+  edge: {}
