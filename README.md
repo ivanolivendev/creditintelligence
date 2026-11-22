@@ -25,6 +25,69 @@ docker compose --profile test run --rm backend-test
 
 Para desligar sem apagar os dados: `docker compose down`. O volume `postgres_data` é persistente. Não use `down -v` sem decidir apagar os dados locais.
 
+## Qualidade e confiabilidade
+
+### Fotografia técnica
+
+Resultados registrados em **22/11/2026**, no commit `f9e5d2bbef8d1c7247ea08487de82d1deb61f8aa`.
+
+| Indicador | Baseline documentada |
+|---|---:|
+| Testes Java unitários | 276 aprovados |
+| Testes Java de integração | 24 aprovados |
+| Testes Python | 17 aprovados no Compose |
+| Testes frontend | 10 aprovados |
+| Cobertura de linhas Java | 97,47% |
+| Cobertura de branches Java | 93,75% |
+| PIT Mutation Score | 98,67% |
+| Testes arquiteturais | ArchUnit aprovado |
+
+Os resultados pertencem a execuções e ambientes distintos. A execução Python direta iniciou dez casos e ficou inconclusiva em um caminho de integração, por isso não foi contada como aprovação adicional. O mutation score mede a força dos testes no escopo do PIT. Ele não é cobertura de código nem prova de ausência de defeitos.
+
+### Estratégia de testes
+
+- Testes unitários isolam regras financeiras, validações, serviços e adapters.
+- Testes de integração usam PostgreSQL, Flyway e cenários transacionais, concorrentes e de rollback.
+- Testes de contrato verificam payloads HTTP e a fronteira Java-Python.
+- ArchUnit verifica dependências entre API, aplicação, domínio e infraestrutura.
+- JaCoCo mede linhas, branches e classes executadas no escopo Java.
+- PIT mede a capacidade das assertions de detectar mutações.
+- pytest/Ruff verificam Python. Vitest, TypeScript, build, lint e Prettier verificam o frontend.
+
+### Garantias verificadas
+
+As 13 invariantes estão detalhadas na [matriz de evidências](development/quality/QUALITY_EVIDENCE_MATRIX.md):
+
+1. Decisões ligadas a análises finalizadas e autorizadas.
+2. Associação entre análise, snapshot documental e política.
+3. Evidências vinculadas a documento, versão e localização.
+4. Rejeição de resultados de tentativas antigas após troca de lease.
+5. Idempotência para a mesma chave e corpo canônico.
+6. Conflito quando a mesma chave recebe corpo diferente.
+7. Transições transacionais com rollback consistente.
+8. Preservação de `MISSING`, `AMBIGUOUS` e `INVALID` sem transformá-los em fatos.
+9. Versionamento e checksum da política executável e textual.
+10. Separação entre explicação de IA e findings determinísticos.
+11. Preservação do histórico quando documentos novos são incluídos.
+12. Decisão humana baseada na identidade autenticada.
+13. Retry limitado e estado sanitizado diante de falhas externas.
+
+### Limitações e parecer
+
+**POC: APTA COM RESSALVAS.** Esse status vale para a demonstração sandbox local e não representa prontidão para MVP compartilhado ou produção bancária.
+
+As limitações são cobertura frontend inferior à cobertura Java, segurança demo com Basic Auth, credencial única e CSRF desabilitado, dependência de conectividade e credenciais para Bedrock e bureau externo, SCA Java sem execução CI comprovada e ausência de SAST dedicado. Mocks e integrações sandbox não comprovam disponibilidade de produção.
+
+### Evidências e reprodução
+
+- [Dossiê consolidado](development/quality/QUALITY_DOSSIER_ALL_IN_ONE.md)
+- [Visão geral](development/quality/QUALITY_OVERVIEW.md)
+- [Inventário de testes](development/quality/TEST_INVENTORY.md)
+- [Matriz de evidências](development/quality/QUALITY_EVIDENCE_MATRIX.md)
+- [Arquitetura e riscos](development/quality/ARCHITECTURE_AND_RISKS.md)
+- [Reprodutibilidade](development/quality/REPRODUCIBILITY.md)
+- [Auditoria detalhada](development/audits/QUALITY_AUDIT_V3.md)
+
 ## Próximas fatias
 
 1. Preparação e validação de AWS. Recursos cloud serão provisionados apenas após análise de conectividade, custo e autorização.
