@@ -3,6 +3,7 @@ package com.creditintelligence.analysis.infrastructure;
 import com.creditintelligence.analysis.application.FieldView;
 import com.creditintelligence.analysis.application.FindingView;
 import com.creditintelligence.analysis.application.SnapshotView;
+import com.creditintelligence.analysis.application.AnalysisDataPort;
 import com.creditintelligence.document.application.DocumentSnapshotRef;
 import com.creditintelligence.analysis.domain.FinancialEngine;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,7 +18,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public class AnalysisDataStore {
+public class AnalysisDataStore implements AnalysisDataPort {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
 
@@ -72,6 +73,16 @@ public class AnalysisDataStore {
                     }, analysisId);
         } catch (EmptyResultDataAccessException ex) {
             return List.of();
+        }
+    }
+
+    @Override
+    public UUID bureauConsultationId(UUID analysisId) {
+        try {
+            return jdbc.queryForObject("SELECT bureau_consultation_id FROM financial_assessment WHERE analysis_id = ?",
+                    (rs, row) -> rs.getObject(1, UUID.class), analysisId);
+        } catch (EmptyResultDataAccessException ex) {
+            return null;
         }
     }
 

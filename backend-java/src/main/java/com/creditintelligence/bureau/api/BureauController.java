@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.GetMapping;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 
 @RestController
 @RequestMapping("/api/v1/proposals/{proposalId}/bureau-consultations")
@@ -20,7 +22,7 @@ public class BureauController {
 
     @PostMapping
     public BureauService.Consultation consult(@PathVariable UUID proposalId,
-            @RequestBody Request request) {
+            @Valid @RequestBody Request request) {
         return service.consult(proposalId, request.caseName());
     }
 
@@ -29,5 +31,6 @@ public class BureauController {
         return service.latest(proposalId);
     }
 
-    public record Request(String caseName) {}
+    public record Request(@Pattern(regexp = "COMPLETE|CLEAN|UNAVAILABLE",
+            message = "caseName must be COMPLETE, CLEAN or UNAVAILABLE") String caseName) {}
 }

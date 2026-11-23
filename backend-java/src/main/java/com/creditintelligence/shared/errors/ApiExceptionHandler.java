@@ -9,6 +9,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import java.util.LinkedHashMap;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -34,7 +38,12 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ProblemDetail> validation(MethodArgumentNotValidException ex, HttpServletRequest request) {
-        return problem(HttpStatus.BAD_REQUEST, "Request validation failed", request);
+        var response = problem(HttpStatus.BAD_REQUEST, "Request validation failed", request);
+        var fields = new LinkedHashMap<String, String>();
+        ex.getBindingResult().getFieldErrors().forEach(error ->
+                fields.putIfAbsent(error.getField(), error.getDefaultMessage()));
+        response.getBody().setProperty("fieldErrors", fields);
+        return response;
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
@@ -47,8 +56,24 @@ public class ApiExceptionHandler {
         return problem(HttpStatus.PAYLOAD_TOO_LARGE, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(ResponseStatusException.class)
+    ResponseEntity<ProblemDetail> responseStatus(ResponseStatusException ex, HttpServletRequest request) {
+        return problem(HttpStatus.valueOf(ex.getStatusCode().value()), ex.getReason(), request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ProblemDetail> accessDenied(AccessDeniedException ex, HttpServletRequest request) {
+        return problem(HttpStatus.FORBIDDEN, "You are not allowed to perform this action", request);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<ProblemDetail> malformed(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        return problem(HttpStatus.BAD_REQUEST, "Request body is invalid", request);
+    }
+
     private ResponseEntity<ProblemDetail> problem(HttpStatus status, String detail, HttpServletRequest request) {
         var body = ProblemDetail.forStatusAndDetail(status, detail);
+        body.setProperty("code", status.name());
         body.setProperty("correlationId", request.getAttribute("correlationId"));
         return ResponseEntity.status(status).body(body);
     }

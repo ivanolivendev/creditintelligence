@@ -1,0 +1,32 @@
+:root {
+  --ci-ink-950: #15132a;
+  --ci-ink-700: #3d3853;
+  --ci-muted: #716b80;
+  --ci-paper: #fcfbf8;
+  --ci-surface: #ffffff;
+  --ci-line: #e8e3e6;
+  --ci-orange: #f26a3d;
+  --ci-coral: #e8455b;
+  --ci-yellow: #ffc857;
+  --ci-magenta: #c83b86;
+  --ci-teal: #0e8f86;
+  --ci-focus: #6557d8;
+  --ci-warm-gradient: linear-gradient(
+    120deg,
+    #f26a3d 0%,
+    #e8455b 48%,
+    #c83b86 100%
+  );
+  --ci-shadow-card: 0 18px 50px rgb(21 19 42 / 8%);
+  --ci-shadow-soft: 0 8px 28px rgb(21 19 42 / 6%);
+  --ci-radius-sm: 0.75rem;
+  --ci-radius-md: 1rem;
+  --ci-radius-lg: 1.5rem;
+  --ci-space-1: 0.25rem;
+  --ci-space-2: 0.5rem;
+  --ci-space-3: 0.75rem;
+  --ci-space-4: 1rem;
+  --ci-space-5: 1.5rem;
+  --ci-space-6: 2rem;
+  --ci-space-7: 3rem;
+}

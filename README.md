@@ -64,18 +64,18 @@ Pop-Location
 
 ### Fotografia técnica
 
-Resultados registrados em **22/11/2026**, no commit `f9e5d2bbef8d1c7247ea08487de82d1deb61f8aa`.
+Resultados verificados no working tree em **23/11/2026**. Metricas de cobertura e mutacao abaixo permanecem a fotografia historica de 22/11 ate nova execucao completa.
 
 | Indicador | Baseline documentada |
 |---|---:|
-| Testes Java unitários | 276 aprovados |
-| Testes Java de integração | 24 aprovados |
-| Testes Python | 17 aprovados no Compose |
-| Testes frontend | 10 aprovados |
-| Cobertura de linhas Java | 97,47% |
-| Cobertura de branches Java | 93,75% |
-| PIT Mutation Score | 98,67% |
-| Testes arquiteturais | ArchUnit aprovado |
+| Testes Java unitários e arquitetura | 276 aprovados nesta árvore |
+| Testes Java de integração | 24 aprovados nesta árvore |
+| Testes Python | 17 aprovados no Compose; Ruff aprovado |
+| Testes frontend | 10 aprovados; build, lint e Prettier aprovados |
+| Cobertura de linhas Java | 97,47% em fotografia histórica de 22/11 |
+| Cobertura de branches Java | 93,75% em fotografia histórica de 22/11 |
+| PIT Mutation Score | 98,67% em fotografia histórica de 22/11 |
+| Testes arquiteturais | Incluídos nos 276 testes atuais |
 
 Esses resultados pertencem a execuções e ambientes distintos. A execução Python direta iniciou dez casos e ficou inconclusiva em um caminho de integração. Ela não foi contada como aprovação adicional. O mutation score mede a capacidade dos testes de detectar mutações no escopo do PIT. Ele não é cobertura de código nem prova de ausência de defeitos.
 
@@ -109,7 +109,7 @@ As 13 invariantes detalhadas na [matriz de evidências](development/quality/QUAL
 
 ### Limitações e parecer
 
-**POC: APTA COM RESSALVAS.** Esse status vale para a demonstração sandbox local e não representa prontidão para MVP compartilhado ou produção bancária.
+**POC: PARCIAL, com núcleo local verificado.** As integrações Bedrock e Consult Center sandbox precisam de nova execução credenciada neste working tree; portanto o status anterior de "apta com ressalvas" permanece apenas como registro histórico.
 
 As limitações relevantes são cobertura frontend inferior à cobertura Java, segurança de demonstração com Basic Auth, credencial única e CSRF desabilitado, dependência de conectividade e credenciais para Bedrock e bureau externo, SCA Java ainda sem execução CI comprovada e ausência de SAST dedicado. Mocks e integrações sandbox não comprovam disponibilidade de produção.
 
@@ -128,11 +128,11 @@ As limitações relevantes são cobertura frontend inferior à cobertura Java, s
 - A análise é síncrona no MVP; não há garantia de processamento durável em background.
 - A PoC opera com uma identidade de demonstração única; não representa isolamento multiusuário.
 - Uma falha inesperada de processamento marca a análise como `FAILED_RETRYABLE`; uma nova requisição pode iniciar a tentativa seguinte.
-- O lease da análise é de 180 segundos, acima do timeout de leitura de 90 segundos do serviço Python, para evitar retry concorrente prematuro.
+- A recuperação de análise em andamento usa atualmente um limite efetivo de 60 segundos no serviço Java; a variável de 180 segundos do Compose ainda não está conectada a essa decisão e não deve ser tratada como garantia.
 - Java é a autoridade para estado, regras, snapshots e decisões. Python não aprova crédito nem grava o esquema transacional.
 - O caminho de execução da PoC é Bedrock/DeepSeek e Consult Center sandbox. Ambos exigem rede e credenciais válidas; quando a integração externa não está disponível, a aplicação registra `UNAVAILABLE` em vez de inventar uma resposta ou trocar silenciosamente para mock.
 - Outbox/SQS/DLQ, OCR, busca vetorial, deploy AWS e operação 24x7 continuam fora do MVP.
-- O estado atualizado está no [Blueprint V3.1](development/Credit_Intelligence_Master_Blueprint_V3.docx) e no [relatório E2E](CREDIT_INTELLIGENCE_V3_4_E2E_REPORT.md).
+- O estado atual está consolidado na [auditoria do working tree](development/audits/CURRENT_IMPLEMENTATION_AUDIT_2026-11-23.md). O [Blueprint V3.1](development/Credit_Intelligence_Master_Blueprint_V3.docx) e o [relatório E2E](CREDIT_INTELLIGENCE_V3_4_E2E_REPORT.md) preservam decisões e evidências históricas.
 
 ## Desligar e limpar dados locais
 

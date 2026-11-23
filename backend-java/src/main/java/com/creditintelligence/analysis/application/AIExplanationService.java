@@ -61,7 +61,9 @@ public class AIExplanationService {
                 data.transactionReferences(analysisId));
         var started = System.nanoTime();
         String failureCode = "DOCUMENT_INTELLIGENCE_UNAVAILABLE";
+        int attempts = 0;
         for (var attempt = 1; attempt <= 3; attempt++) {
+            attempts = attempt;
             try {
                 var response = python.explain(request);
                 validate(request, response);
@@ -80,7 +82,7 @@ public class AIExplanationService {
             }
             pauseBeforeRetry(attempt);
         }
-        save(analysisId, "UNAVAILABLE", failureCode, null, 3, elapsedMillis(started));
+        save(analysisId, "UNAVAILABLE", failureCode, null, attempts, elapsedMillis(started));
     }
 
     @Transactional(readOnly = true)
@@ -109,7 +111,7 @@ public class AIExplanationService {
     private void validate(ExplainRequest request, ExplainResponse response) {
         if (response == null || !"1.0".equals(response.contractVersion())
                 || !request.analysisId().equals(response.analysisId())
-                || !Set.of("MOCK", "BEDROCK").contains(response.provider())
+                || !("MOCK".equals(response.provider()) || "BEDROCK".equals(response.provider()))
                 || (!"MOCK".equals(expectedProvider) && !expectedProvider.equals(response.provider()))
                 || blank(response.modelId())
                 || blank(response.promptVersion()) || blank(response.summary())

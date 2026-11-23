@@ -27,7 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class AnalysisContractIntegrationTest {
+class AnalysisContractIntegrationTest extends PostgresIntegrationTest {
     private static final String AUTH = "Basic " + Base64.getEncoder().encodeToString(
             "analyst:local_demo_only_change_me".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
 
@@ -44,7 +44,7 @@ class AnalysisContractIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON).content(payload))
                 .andExpect(status().isCreated()).andReturn().getResponse();
         var proposalId = json.readTree(created.getContentAsString()).path("id").asText();
-        var bytes = Files.readAllBytes(Path.of("/fixtures/documents/income-proof-demo.pdf"));
+        var bytes = Files.readAllBytes(fixture("income-proof-demo.pdf"));
         var file = new MockMultipartFile("file", "income.pdf", "application/pdf", bytes);
         mvc.perform(multipart("/api/v1/proposals/{id}/documents", proposalId)
                 .file(file).param("type", "INCOME_PROOF").header("Authorization", AUTH))
@@ -80,7 +80,7 @@ class AnalysisContractIntegrationTest {
         var proposalId = json.readTree(created.getContentAsString()).path("id").asText();
         for (var month : List.of("2026-08", "2026-09", "2026-10")) {
             for (var entry : List.of("payslip", "statement")) {
-                var bytes = Files.readAllBytes(Path.of("/fixtures/documents/" + entry + "-" + month + "-demo.pdf"));
+                var bytes = Files.readAllBytes(fixture(entry + "-" + month + "-demo.pdf"));
                 mvc.perform(multipart("/api/v1/proposals/{id}/documents", proposalId)
                         .file(new MockMultipartFile("file", entry + ".pdf", "application/pdf", bytes))
                         .param("type", "payslip".equals(entry) ? "PAYSLIP" : "BANK_STATEMENT")
@@ -117,5 +117,12 @@ class AnalysisContractIntegrationTest {
         assertThat(analysis.path("status").asText()).isEqualTo("FAILED_PERMANENT");
         assertThat(analysis.path("financialAssessment").isNull()).isTrue();
         assertThat(analysis.path("extractedFields").size()).isZero();
+    }
+    private static Path fixture(String filename) {
+        var local = Path.of("fixtures", "documents", filename);
+        if (Files.exists(local)) {
+            return local;
+        }
+        return Path.of("..", "fixtures", "documents", filename);
     }
 }

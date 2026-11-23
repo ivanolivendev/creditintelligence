@@ -1,0 +1,606 @@
+openapi: 3.0.3
+info:
+  title: Credit Intelligence API
+  version: 0.1.0
+  description: API de pré-análise documental sintética com decisão humana obrigatória.
+servers:
+  - url: http://localhost:18080
+security:
+  - basicAuth: []
+paths:
+  /api/v1/proposals:
+    get:
+      summary: Lista propostas mais recentes
+      operationId: listProposals
+      responses:
+        "200":
+          description: Lista de propostas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ProposalView" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      summary: Cria uma proposta sintética
+      operationId: createProposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProposalRequest" }
+      responses:
+        "201":
+          description: Proposta criada
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProposalView" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/proposals/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ProposalPathId"
+    get:
+      summary: Obtém uma proposta
+      operationId: getProposal
+      responses:
+        "200":
+          description: Proposta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProposalView" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/proposals/{proposalId}/documents:
+    parameters:
+      - $ref: "#/components/parameters/ProposalId"
+    get:
+      summary: Lista documentos vinculados
+      operationId: listDocuments
+      responses:
+        "200":
+          description: Documentos da proposta
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DocumentView" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      summary: Envia um PDF
+      operationId: uploadDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type, file]
+              properties:
+                type: { $ref: "#/components/schemas/DocumentType" }
+                period:
+                  type: string
+                  nullable: true
+                  pattern: '^\\d{4}-\\d{2}$'
+                  description: Período financeiro no formato YYYY-MM, quando aplicável.
+                file:
+                  type: string
+                  format: binary
+                  description: PDF digital com texto selecionável.
+      responses:
+        "201":
+          description: Documento recebido
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentView" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "413": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/proposals/{proposalId}/analyses:
+    parameters:
+      - $ref: "#/components/parameters/ProposalId"
+      - $ref: "#/components/parameters/IdempotencyKey"
+    post:
+      summary: Executa análise determinística e leitura assistida
+      description: O corpo é opcional. Quando fornecido, representa o cenário sintético do empréstimo.
+      operationId: createAnalysis
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Scenario" }
+      responses:
+        "200":
+          description: Análise concluída ou em execução
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalysisView" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /api/v1/proposals/{proposalId}/analyses/{analysisId}:
+    parameters:
+      - $ref: "#/components/parameters/ProposalId"
+      - $ref: "#/components/parameters/AnalysisId"
+    get:
+      summary: Obtém o dossiê de uma análise
+      operationId: getAnalysis
+      responses:
+        "200":
+          description: Dossiê da análise
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalysisView" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/proposals/{proposalId}/dossier:
+    parameters:
+      - $ref: "#/components/parameters/ProposalId"
+    get:
+      summary: Obtém o dossiê por parâmetro de análise
+      operationId: getDossier
+      parameters:
+        - $ref: "#/components/parameters/AnalysisQueryId"
+      responses:
+        "200":
+          description: Dossiê da análise
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalysisView" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/proposals/{proposalId}/bureau-consultations:
+    parameters:
+      - $ref: "#/components/parameters/ProposalId"
+    post:
+      summary: Consulta cenário sintético do bureau
+      operationId: createBureauConsultation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BureauConsultationRequest" }
+      responses:
+        "200":
+          description: Consulta registrada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BureauConsultation" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /api/v1/proposals/{proposalId}/bureau-consultations/latest:
+    parameters:
+      - $ref: "#/components/parameters/ProposalId"
+    get:
+      summary: Obtém a consulta de bureau mais recente
+      operationId: getLatestBureauSnapshot
+      responses:
+        "200":
+          description: Consulta mais recente ou estado não solicitado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BureauSnapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/proposals/{proposalId}/decisions:
+    parameters:
+      - $ref: "#/components/parameters/ProposalId"
+    get:
+      summary: Lista decisões humanas
+      operationId: listDecisions
+      responses:
+        "200":
+          description: Histórico de decisões
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DecisionView" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/Problem" }
+    post:
+      summary: Registra decisão humana
+      operationId: createDecision
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DecisionRequest" }
+      responses:
+        "201":
+          description: Decisão registrada
+          headers:
+            Location: { $ref: "#/components/headers/Location" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DecisionView" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+components:
+  securitySchemes:
+    basicAuth: { type: http, scheme: basic }
+  headers:
+    Location:
+      description: URI do recurso criado.
+      schema: { type: string, format: uri-reference }
+  parameters:
+    ProposalPathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProposalId:
+      name: proposalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AnalysisId:
+      name: analysisId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AnalysisQueryId:
+      name: analysisId
+      in: query
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, maxLength: 120 }
+  responses:
+    Problem:
+      description: Erro Problem Details com correlação.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+    Unauthorized:
+      description: Autenticação ausente ou inválida.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+    Forbidden:
+      description: Usuário autenticado sem permissão para a operação.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ProblemDetail" }
+  schemas:
+    CreateProposalRequest:
+      type: object
+      required: [applicant, declaredMonthlyIncome, currency]
+      properties:
+        applicant: { $ref: "#/components/schemas/ApplicantRequest" }
+        declaredMonthlyIncome:
+          type: number
+          format: double
+          minimum: 0
+          multipleOf: 0.01
+        currency: { type: string, enum: [BRL] }
+    ApplicantRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        syntheticIdentifier:
+          type: string
+          nullable: true
+          pattern: "^DEMO-[A-Za-z0-9-]{1,32}$"
+    ProposalView:
+      type: object
+      required:
+        [id, applicant, declaredMonthlyIncome, currency, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        applicant: { $ref: "#/components/schemas/ApplicantView" }
+        declaredMonthlyIncome: { type: number, format: double }
+        currency: { type: string }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+    ApplicantView:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        syntheticIdentifier: { type: string, nullable: true }
+    DocumentType:
+      type: string
+      enum: [IDENTIFICATION, INCOME_PROOF, BANK_STATEMENT, PAYSLIP]
+    DocumentView:
+      type: object
+      required: [id, proposalId, type, version, sha256, uploadedAt, status]
+      properties:
+        id: { type: string, format: uuid }
+        proposalId: { type: string, format: uuid }
+        type: { $ref: "#/components/schemas/DocumentType" }
+        version: { type: integer, minimum: 1 }
+        sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        uploadedAt: { type: string, format: date-time }
+        status: { type: string }
+        period: { type: string, nullable: true, pattern: '^\\d{4}-\\d{2}$' }
+    Scenario:
+      type: object
+      properties:
+        principalRequested:
+          { type: number, format: double, minimum: 0, nullable: true }
+        termMonths: { type: integer, minimum: 1, maximum: 600 }
+        monthlyInterestRate:
+          { type: number, format: double, minimum: 0, maximum: 1 }
+        currency: { type: string, enum: [BRL] }
+        pricingSource: { type: string }
+    AnalysisView:
+      type: object
+      required:
+        [
+          analysisId,
+          proposalId,
+          status,
+          attempt,
+          documents,
+          extractedFields,
+          findings,
+        ]
+      properties:
+        analysisId: { type: string, format: uuid }
+        proposalId: { type: string, format: uuid }
+        status: { type: string }
+        attempt: { type: integer, minimum: 1 }
+        documentSnapshotHash:
+          { type: string, nullable: true, pattern: "^[0-9a-f]{64}$" }
+        policyVersion: { type: string, nullable: true }
+        policyChecksum: { type: string, nullable: true }
+        declaredMonthlyIncome: { type: number, format: double, nullable: true }
+        currency: { type: string, nullable: true }
+        incomeTolerancePercent: { type: number, format: double, nullable: true }
+        requiredDocumentTypes: { type: array, items: { type: string } }
+        documents:
+          { type: array, items: { $ref: "#/components/schemas/SnapshotView" } }
+        extractedFields:
+          { type: array, items: { $ref: "#/components/schemas/FieldView" } }
+        findings:
+          { type: array, items: { $ref: "#/components/schemas/FindingView" } }
+        aiExplanationStatus: { type: string, nullable: true }
+        aiExplanation: { $ref: "#/components/schemas/AIExplanationView" }
+        errorCode: { type: string, nullable: true }
+        startedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+        financialAssessment: { $ref: "#/components/schemas/Assessment" }
+    SnapshotView:
+      type: object
+      required: [documentId, type, version, sha256]
+      properties:
+        documentId: { type: string, format: uuid }
+        type: { type: string }
+        version: { type: integer, minimum: 1 }
+        sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        period: { type: string, nullable: true }
+    FieldView:
+      type: object
+      required: [documentId, documentVersion, fieldName, extractionStatus]
+      properties:
+        documentId: { type: string, format: uuid }
+        documentVersion: { type: integer, minimum: 1 }
+        fieldName: { type: string }
+        value: { type: string, nullable: true }
+        currency: { type: string, nullable: true }
+        extractionStatus: { type: string }
+        evidenceRef: { type: string, nullable: true }
+        page: { type: integer, nullable: true, minimum: 1 }
+        snippet: { type: string, nullable: true }
+    FindingView:
+      type: object
+      required: [code, ruleVersion, result, details]
+      properties:
+        code: { type: string }
+        ruleVersion: { type: string }
+        result: { type: string }
+        details: { type: string }
+        evidenceRef: { type: string, nullable: true }
+    AIExplanationView:
+      type: object
+      required: [status, explanations, hypotheses, limitations]
+      properties:
+        status: { type: string }
+        provider: { type: string, nullable: true }
+        modelId: { type: string, nullable: true }
+        promptVersion: { type: string, nullable: true }
+        summary: { type: string, nullable: true }
+        explanations:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/FindingExplanation" },
+          }
+        hypotheses:
+          { type: array, items: { $ref: "#/components/schemas/Hypothesis" } }
+        limitations: { type: array, items: { type: string } }
+    FindingExplanation:
+      type: object
+      required: [findingCode, message, policyReferences, evidenceReferences]
+      properties:
+        findingCode: { type: string }
+        message: { type: string }
+        policyReferences: { type: array, items: { type: string } }
+        evidenceReferences: { type: array, items: { type: string } }
+    Hypothesis:
+      type: object
+      required:
+        [type, description, transactionRefs, evidenceRefs, reason, reviewStatus]
+      properties:
+        type: { type: string }
+        description: { type: string }
+        transactionRefs: { type: array, items: { type: string } }
+        evidenceRefs: { type: array, items: { type: string } }
+        reason: { type: string }
+        reviewStatus: { type: string }
+    Assessment:
+      type: object
+      required:
+        [
+          currency,
+          policyVersion,
+          ruleVersion,
+          reviewStatus,
+          validIncomePeriods,
+          salaryMatches,
+          findings,
+          limitations,
+        ]
+      properties:
+        currency: { type: string }
+        policyVersion: { type: string }
+        ruleVersion: { type: string }
+        reviewStatus: { type: string }
+        validIncomePeriods: { type: integer, minimum: 0 }
+        averageNetIncome: { type: number, format: double, nullable: true }
+        minimumNetIncome: { type: number, format: double, nullable: true }
+        maximumNetIncome: { type: number, format: double, nullable: true }
+        variabilityRatio: { type: number, format: double, nullable: true }
+        salaryMatches:
+          { type: array, items: { $ref: "#/components/schemas/SalaryMatch" } }
+        unknownCredits: { type: integer, minimum: 0 }
+        payrollDeductionsIncludedInNet:
+          { type: number, format: double, nullable: true }
+        additionalMonthlyPayments:
+          { type: number, format: double, nullable: true }
+        obligationStatus: { type: string, nullable: true }
+        maxTotalInstallments: { type: number, format: double, nullable: true }
+        maxNewInstallment: { type: number, format: double, nullable: true }
+        simulation: { $ref: "#/components/schemas/Simulation" }
+        findings:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/FinancialFinding" },
+          }
+        limitations: { type: array, items: { type: string } }
+        bureau: { $ref: "#/components/schemas/BureauReport" }
+    SalaryMatch:
+      type: object
+      required:
+        [period, payslipNet, bankCredit, difference, status, evidenceRefs]
+      properties:
+        period: { type: string }
+        payslipNet: { type: number, format: double }
+        bankCredit: { type: number, format: double }
+        difference: { type: number, format: double }
+        status: { type: string }
+        evidenceRefs: { type: array, items: { type: string } }
+    FinancialFinding:
+      type: object
+      required: [code, result, details, evidenceRefs]
+      properties:
+        code: { type: string }
+        result: { type: string }
+        details: { type: string }
+        evidenceRefs: { type: array, items: { type: string } }
+    Simulation:
+      type: object
+      required: [termMonths, monthlyInterestRate, pricingSource, limitation]
+      properties:
+        termMonths: { type: integer }
+        monthlyInterestRate: { type: number, format: double }
+        requestedPrincipal: { type: number, format: double, nullable: true }
+        requestedPayment: { type: number, format: double, nullable: true }
+        estimatedPrincipalAtCapacity:
+          { type: number, format: double, nullable: true }
+        pricingSource: { type: string }
+        limitation: { type: string }
+    BureauConsultationRequest:
+      type: object
+      required: [caseName]
+      properties:
+        caseName: { type: string, enum: [COMPLETE, CLEAN, UNAVAILABLE] }
+    BureauConsultation:
+      type: object
+      required: [consultationId, report]
+      properties:
+        consultationId: { type: string, format: uuid }
+        report: { $ref: "#/components/schemas/BureauReport" }
+    BureauSnapshot:
+      type: object
+      required: [report]
+      properties:
+        id: { type: string, format: uuid, nullable: true }
+        report: { $ref: "#/components/schemas/BureauReport" }
+    BureauReport:
+      type: object
+      required: [provider, product, environment, status, limitations]
+      properties:
+        provider: { type: string }
+        product: { type: string }
+        environment: { type: string }
+        status: { type: string }
+        consultedAt: { type: string, format: date-time, nullable: true }
+        responseVersion: { type: string, nullable: true }
+        referenceId: { type: string, nullable: true }
+        score: { $ref: "#/components/schemas/BureauScore" }
+        restrictions: { $ref: "#/components/schemas/BureauRestrictions" }
+        limitations: { type: array, items: { type: string } }
+    BureauScore:
+      type: object
+      properties:
+        value: { type: integer, nullable: true }
+        minimum: { type: integer, nullable: true }
+        maximum: { type: integer, nullable: true }
+        model: { type: string, nullable: true }
+    BureauRestrictions:
+      type: object
+      properties:
+        count: { type: integer, nullable: true }
+    DecisionRequest:
+      type: object
+      required: [analysisId, documentSnapshotHash, outcome, reason]
+      properties:
+        analysisId: { type: string, format: uuid }
+        documentSnapshotHash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        outcome:
+          { type: string, enum: [APPROVED, REJECTED, MORE_INFO_REQUIRED] }
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+    DecisionView:
+      type: object
+      required:
+        [
+          id,
+          proposalId,
+          analysisId,
+          analystId,
+          outcome,
+          reason,
+          documentSnapshotHash,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        proposalId: { type: string, format: uuid }
+        analysisId: { type: string, format: uuid }
+        analystId: { type: string }
+        outcome:
+          { type: string, enum: [APPROVED, REJECTED, MORE_INFO_REQUIRED] }
+        reason: { type: string }
+        documentSnapshotHash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        createdAt: { type: string, format: date-time }
+    ProblemDetail:
+      type: object
+      required: [type, title, status, detail, code, correlationId]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer, format: int32 }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference, nullable: true }
+        code: { type: string }
+        correlationId: { type: string, nullable: true }
+        fieldErrors: { type: object, additionalProperties: { type: string } }

@@ -8,7 +8,7 @@
 - Node.js e npm para `frontend`
 - Dados sintéticos do repositório
 
-Não use credenciais reais ou documentos pessoais. O Compose usa providers mock por padrão. Bedrock real e bureau externo exigem configuração autorizada e conectividade, e seus resultados devem ser identificados separadamente.
+Não use credenciais reais ou documentos pessoais. O runtime Compose usa `AI_PROVIDER=bedrock` e `BUREAU_MODE=sandbox` por padrão; o serviço `backend-test` seleciona providers mock explicitamente. Bedrock e bureau externo exigem configuração autorizada e conectividade, e seus resultados devem ser identificados separadamente.
 
 ## Comandos
 
@@ -18,7 +18,7 @@ Não use credenciais reais ou documentos pessoais. O Compose usa providers mock 
 docker compose --profile test run --rm backend-test mvn -B -ntp clean test
 ```
 
-Relatórios em `backend-java/target/surefire-reports/` e `backend-java/target/site/jacoco/`. A fotografia atual registrada contém 276 casos aprovados.
+Relatórios em `backend-java/target/surefire-reports/` e `backend-java/target/site/jacoco/`. A execução no working tree de 23/11 registrou 276 casos aprovados.
 
 ### Java integração
 
@@ -26,7 +26,7 @@ Relatórios em `backend-java/target/surefire-reports/` e `backend-java/target/si
 docker compose --profile test run --rm backend-test mvn -B -ntp -Pintegration verify
 ```
 
-Esse perfil inicia PostgreSQL para Testcontainers, aplica migrations Flyway e grava resultados em `backend-java/target/failsafe-reports/`. A fotografia atual contém 24 casos aprovados.
+Esse perfil inicia PostgreSQL para Testcontainers, aplica migrations Flyway e grava resultados em `backend-java/target/failsafe-reports/`. O perfil usa o socket Docker local para Testcontainers; nao o trate como configuracao de deploy. A execucao de 23/11 aprovou 24 casos sem falhas, erros ou ignorados.
 
 ### PIT
 
@@ -43,7 +43,7 @@ docker compose --profile test run --rm document-intelligence-test python -m pyte
 docker compose --profile test run --rm document-intelligence-test python -m ruff check app tests
 ```
 
-A auditoria datada registra 17 testes aprovados e Ruff aprovado. A tentativa direta local de `python -m pytest -q` em 22/11 executou dez casos e permaneceu bloqueada em um caminho de integração. Esse resultado direto é inconclusivo e não substitui a execução Compose registrada.
+A auditoria de 23/11 registrou 17 testes aprovados e Ruff aprovado pelo Compose. Uma tentativa direta local anterior e seus resultados permanecem apenas como historico; nao substituem a execucao Compose.
 
 ### Frontend
 
@@ -56,7 +56,7 @@ npm run lint
 npm run format:check
 ```
 
-A execução local desta missão aprovou 10 testes em dois arquivos. A cobertura fica em `frontend/coverage/` e deve ser lida separadamente da JaCoCo Java.
+A execução de 23/11 aprovou 10 testes em dois arquivos, alem de build, lint e formatacao. A cobertura fica em `frontend/coverage/` e deve ser lida separadamente da JaCoCo Java.
 
 ### CI e auditorias de dependência
 

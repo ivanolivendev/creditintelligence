@@ -1,3 +1,7 @@
+# Registro histórico de E2E V3.4
+
+> Este arquivo preserva execuções de 21 e 22/11/2026 e contém conclusões contraditórias entre as duas atualizações. Ele não é a fonte de estado do working tree atual. Para código e verificações de 23/11/2026, consulte `development/audits/CURRENT_IMPLEMENTATION_AUDIT_2026-11-23.md`. Uma nova execução credenciada de Bedrock e Consult Center é necessária para substituir este registro.
+
 # Atualização de verificação — 22/11/2026
 
 - A API key exportada para o usuário `BedrockAPIKey-6tlf` foi extraída corretamente do CSV e injetada no container como `AWS_BEARER_TOKEN_BEDROCK`, sem exibição do segredo.

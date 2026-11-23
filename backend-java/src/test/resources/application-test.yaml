@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/credit_intelligence}
+    username: ${SPRING_DATASOURCE_USERNAME:credit_app}
+    password: ${SPRING_DATASOURCE_PASSWORD:local_demo_only_change_me}
+
+document:
+  intelligence:
+    url: ${DOCUMENT_INTELLIGENCE_URL:http://localhost:8000}
+    token: ${INTERNAL_SERVICE_TOKEN:local_internal_token_change_me}
+
+demo:
+  analyst:
+    user: ${DEMO_ANALYST_USER:analyst}
+    password: ${DEMO_ANALYST_PASSWORD:local_demo_only_change_me}

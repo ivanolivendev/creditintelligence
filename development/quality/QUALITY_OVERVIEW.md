@@ -1,5 +1,9 @@
 # Dossiê de qualidade e confiabilidade técnica
 
+## Estado de vigência
+
+Esta e uma fotografia historica de 22/11/2026. O estado do working tree e os resultados reexecutados em 23/11/2026 estao em `development/audits/CURRENT_IMPLEMENTATION_AUDIT_2026-11-23.md`; nao use os totais abaixo como prova da arvore atual sem essa distincao.
+
 ## Escopo da análise
 
 Este dossiê consolida as evidências disponíveis no repositório Crédito Inteligente para a POC local com dados sintéticos e decisão humana. A análise foi registrada em 22/11/2026 sobre o working tree associado ao commit `f9e5d2bbef8d1c7247ea08487de82d1deb61f8aa`. O working tree já possuía alterações e arquivos não rastreados antes desta missão. Nenhum arquivo fora de `development/quality/` foi alterado.

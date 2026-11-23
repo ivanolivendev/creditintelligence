@@ -36,6 +36,11 @@ public class ProposalController {
         return ResponseEntity.created(URI.create("/api/v1/proposals/" + result.id())).body(result);
     }
 
+    @GetMapping
+    public java.util.List<ProposalView> list() {
+        return service.list();
+    }
+
     @GetMapping("/{id}")
     public ProposalView get(@PathVariable UUID id) {
         return service.get(id);
@@ -48,5 +53,5 @@ public class ProposalController {
 
     public record ApplicantRequest(
             @NotBlank @Size(max = 160) String name,
-            @NotBlank @Pattern(regexp = "DEMO-[A-Za-z0-9-]{1,32}") String syntheticIdentifier) {}
+            @Pattern(regexp = "DEMO-[A-Za-z0-9-]{1,32}") String syntheticIdentifier) {}
 }

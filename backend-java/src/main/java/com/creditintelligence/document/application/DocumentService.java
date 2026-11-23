@@ -1,8 +1,6 @@
 package com.creditintelligence.document.application;
 
 import com.creditintelligence.document.domain.DocumentType;
-import com.creditintelligence.document.infrastructure.DocumentEntity;
-import com.creditintelligence.document.infrastructure.DocumentRepository;
 import com.creditintelligence.proposal.application.ProposalService;
 import com.creditintelligence.shared.errors.InvalidDocumentException;
 import com.creditintelligence.shared.errors.PayloadTooLargeException;
@@ -30,10 +28,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class DocumentService {
     private static final int MAX_BYTES = 10 * 1024 * 1024;
     private final ProposalService proposals;
-    private final DocumentRepository documents;
+    private final DocumentDataPort documents;
     private final DocumentStorage storage;
 
-    public DocumentService(ProposalService proposals, DocumentRepository documents, DocumentStorage storage) {
+    public DocumentService(ProposalService proposals, DocumentDataPort documents, DocumentStorage storage) {
         this.proposals = proposals;
         this.documents = documents;
         this.storage = storage;
@@ -78,7 +76,7 @@ public class DocumentService {
             }
         });
         var digest = sha256(content);
-        var document = documents.save(new DocumentEntity(id, proposalId, type.name(), key, digest,
+        var document = documents.save(new DocumentDataPort.DocumentRecord(id, proposalId, type.name(), key, digest,
                 nextVersion, OffsetDateTime.now(ZoneOffset.UTC), "AVAILABLE", period));
         return toView(document);
     }
@@ -86,20 +84,19 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public List<DocumentView> list(UUID proposalId) {
         proposals.get(proposalId);
-        return documents.findByProposalIdOrderByTypeAscDocumentVersionAsc(proposalId)
-                .stream().map(this::toView).toList();
+        return documents.list(proposalId).stream().map(this::toView).toList();
     }
 
     @Transactional(readOnly = true)
     public List<DocumentSnapshotRef> snapshot(UUID proposalId) {
         proposals.get(proposalId);
-        var latestByType = documents.findByProposalIdOrderByTypeAscDocumentVersionAsc(proposalId).stream()
-                .collect(Collectors.toMap(document -> document.getType() + ":" + document.getPeriodKey(), document -> document,
+        var latestByType = documents.list(proposalId).stream()
+                .collect(Collectors.toMap(document -> document.type() + ":" + document.period(), document -> document,
                         (older, newer) -> newer, LinkedHashMap::new));
         return latestByType.values().stream()
-                .map(document -> new DocumentSnapshotRef(document.getId(), proposalId,
-                        DocumentType.valueOf(document.getType()), document.getDocumentVersion(),
-                        document.getObjectKey(), document.getSha256(), document.getPeriodKey()))
+                .map(document -> new DocumentSnapshotRef(document.id(), proposalId,
+                        DocumentType.valueOf(document.type()), document.version(),
+                        document.objectKey(), document.sha256(), document.period()))
                 .toList();
     }
 
@@ -131,9 +128,8 @@ public class DocumentService {
         }
     }
 
-    private DocumentView toView(DocumentEntity document) {
-        return new DocumentView(document.getId(), document.getProposalId(),
-                DocumentType.valueOf(document.getType()), document.getDocumentVersion(),
-                document.getSha256(), document.getUploadedAt(), document.getStatus(), document.getPeriodKey());
+    private DocumentView toView(DocumentDataPort.DocumentRecord document) {
+        return new DocumentView(document.id(), document.proposalId(), DocumentType.valueOf(document.type()),
+                document.version(), document.sha256(), document.uploadedAt(), document.status(), document.period());
     }
 }

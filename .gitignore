@@ -1,8 +1,15 @@
 .env
 **/.env
 .bedrock.env
+.aws/
 credenciais.txt
 BedrockAPIKey-6tlf_accessKeys.csv
+*.pem
+*.p12
+*.pfx
+*.key
+chavenda.txt
+.java-verification.lock
 **/target/
 **/__pycache__/
 **/.pytest_cache/
@@ -10,6 +17,7 @@ BedrockAPIKey-6tlf_accessKeys.csv
 **/.venv/
 **/node_modules/
 **/dist/
+**/coverage/
 **/*.tsbuildinfo
 tmp/
 documentos-para-analise/

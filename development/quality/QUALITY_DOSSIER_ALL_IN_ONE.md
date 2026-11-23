@@ -1,5 +1,7 @@
 # Dossiê de qualidade e confiabilidade técnica
 
+> Fotografia histórica de 22/11/2026. Para o estado do working tree e os comandos reexecutados em 23/11/2026, use `development/audits/CURRENT_IMPLEMENTATION_AUDIT_2026-11-23.md`. Os totais deste dossiê não devem ser apresentados como prova da árvore atual sem essa distinção.
+
 ## Sumário
 
 1. [Visão geral](#1-visão-geral)

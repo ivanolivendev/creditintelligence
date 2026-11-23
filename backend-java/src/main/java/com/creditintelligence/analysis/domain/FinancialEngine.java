@@ -4,9 +4,13 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.text.Normalizer;
 import com.creditintelligence.bureau.application.BureauReport;
 
 /** Deterministic calculations for synthetic documentary pre-analysis only. */
@@ -65,7 +69,9 @@ public final class FinancialEngine {
         }
         var incomes = profile.incomePeriods().stream().filter(p -> p.net() != null).toList();
         var validPeriods = incomes.stream().map(IncomePeriod::period).distinct().count();
-        var complete = validPeriods == 3 && profile.incomePeriods().size() == 3;
+        var distinctIncomePeriods = profile.incomePeriods().stream().map(IncomePeriod::period).distinct().count();
+        var complete = validPeriods == 3 && distinctIncomePeriods == 3
+                && profile.incomePeriods().size() == 3;
         BigDecimal average = null;
         BigDecimal minimum = null;
         BigDecimal maximum = null;
@@ -85,8 +91,11 @@ public final class FinancialEngine {
                 incomes.stream().map(IncomePeriod::netEvidenceRef).toList()));
         if (variability != null) {
             findings.add(new Finding("INCOME_STABILITY",
-                    variability.compareTo(policy.stabilityWarningRatio()) > 0 ? "WARNING" : "PASS",
-                    "Net income variability ratio=" + variability + "; policy=" + policy.stabilityWarningRatio(),
+                    !complete ? "NOT_EVALUATED"
+                            : variability.compareTo(policy.stabilityWarningRatio()) > 0 ? "WARNING" : "PASS",
+                    !complete ? "Three factual payslip periods required"
+                            : "Net income variability ratio=" + variability + "; policy="
+                                    + policy.stabilityWarningRatio(),
                     incomes.stream().map(IncomePeriod::netEvidenceRef).toList()));
         }
         Set<String> usedTransactions = new HashSet<>();
@@ -96,13 +105,20 @@ public final class FinancialEngine {
                     .filter(tx -> tx.period().equals(income.period()) && "CREDIT".equals(tx.direction())
                             && "POSSIBLE_SALARY".equals(tx.classification())
                             && !usedTransactions.contains(tx.id())).toList();
-            var credit = candidates.stream().map(BankTransaction::amount)
+            Map<String, List<BankTransaction>> semanticCandidates = new HashMap<>();
+            candidates.forEach(tx -> semanticCandidates.computeIfAbsent(salaryCreditKey(tx), ignored -> new ArrayList<>())
+                    .add(tx));
+            var duplicateCandidates = semanticCandidates.values().stream()
+                    .filter(group -> group.size() > 1).flatMap(List::stream).toList();
+            var usableCandidates = semanticCandidates.values().stream()
+                    .filter(group -> group.size() == 1).flatMap(List::stream).toList();
+            var credit = usableCandidates.stream().map(BankTransaction::amount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             var difference = income.net().subtract(credit).abs();
             var differencePercent = income.net().signum() == 0 ? BigDecimal.ZERO
                     : difference.divide(income.net(), 8, RoundingMode.HALF_UP)
                             .multiply(BigDecimal.valueOf(100));
-            var status = candidates.isEmpty() ? "UNKNOWN"
+            var status = !duplicateCandidates.isEmpty() ? "NEEDS_REVIEW" : candidates.isEmpty() ? "UNKNOWN"
                     : differencePercent.compareTo(policy.salaryTolerancePercent()) <= 0 ? "MATCH" : "UNMATCHED";
             candidates.forEach(tx -> usedTransactions.add(tx.id()));
             var refs = new ArrayList<String>();
@@ -110,6 +126,13 @@ public final class FinancialEngine {
             candidates.forEach(tx -> refs.add(tx.evidenceRef()));
             matches.add(new SalaryMatch(income.period(), income.net(), money(credit),
                     money(difference), status, refs));
+        }
+        var duplicateEvidenceRefs = matches.stream()
+                .filter(match -> "NEEDS_REVIEW".equals(match.status()))
+                .flatMap(match -> match.evidenceRefs().stream()).distinct().toList();
+        if (!duplicateEvidenceRefs.isEmpty()) {
+            findings.add(new Finding("SALARY_CREDIT_DUPLICATES", "NOT_EVALUATED",
+                    "Semantically duplicate salary credits require human review", duplicateEvidenceRefs));
         }
         var bankPeriods = profile.bankTransactions().stream().map(BankTransaction::period).distinct().count();
         findings.add(new Finding("REQUIRED_BANK_STATEMENTS", bankPeriods == 3 ? "PASS" : "NOT_EVALUATED",
@@ -184,5 +207,14 @@ public final class FinancialEngine {
 
     private static BigDecimal money(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static String salaryCreditKey(BankTransaction transaction) {
+        var normalizedDescription = Normalizer.normalize(transaction.descriptionOriginal(), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").toUpperCase(Locale.ROOT)
+                .replaceAll("[^A-Z0-9]+", " ").trim();
+        return transaction.period() + "|" + transaction.postedAt() + "|"
+                + transaction.amount().stripTrailingZeros().toPlainString() + "|BRL|"
+                + normalizedDescription;
     }
 }

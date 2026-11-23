@@ -1,39 +1,34 @@
 param(
-    [string] $Profile = 'bedrock',
-    [string] $Region = 'us-east-1',
-    [string] $ModelId = 'deepseek.v3.2'
+    [string] $EnvFile = '.env'
 )
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$envPath = Join-Path $root '.bedrock.env'
 Push-Location $root
 try {
-    $session = aws sts get-federation-token --name CreditIntelligenceLocal --policy file://infra/aws-demo/bedrock-invoke-policy.json --duration-seconds 3600 --profile $Profile --region $Region --output json | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0 -or -not $session.Credentials.AccessKeyId) {
-        throw 'Could not obtain temporary Bedrock credentials. Check the AWS profile and IAM/SCP permissions.'
+    $envPath = Join-Path $root $EnvFile
+    if (-not (Test-Path -LiteralPath $envPath)) {
+        throw "Environment file not found: $EnvFile"
+    }
+    $envLines = Get-Content -LiteralPath $envPath
+    $required = @('AI_PROVIDER=bedrock', 'BEDROCK_MODEL_ID=deepseek.v3.2', 'AWS_REGION=')
+    foreach ($entry in $required) {
+        if (-not ($envLines | Where-Object { $_.StartsWith($entry) })) {
+            throw "Missing required Bedrock setting: $entry"
+        }
+    }
+    if (-not ($envLines | Where-Object { $_ -match '^AWS_ACCESS_KEY_ID=\S+' })) {
+        throw 'AWS_ACCESS_KEY_ID is missing from the environment file.'
+    }
+    if (-not ($envLines | Where-Object { $_ -match '^AWS_SECRET_ACCESS_KEY=\S+' })) {
+        throw 'AWS_SECRET_ACCESS_KEY is missing from the environment file.'
     }
 
-    $lines = @(
-        'AI_PROVIDER=bedrock',
-        "AWS_REGION=$Region",
-        "BEDROCK_MODEL_ID=$ModelId",
-        "AWS_ACCESS_KEY_ID=$($session.Credentials.AccessKeyId)",
-        "AWS_SECRET_ACCESS_KEY=$($session.Credentials.SecretAccessKey)",
-        "AWS_SESSION_TOKEN=$($session.Credentials.SessionToken)"
-    )
-    Set-Content -LiteralPath $envPath -Value $lines -Encoding ascii
-
-    $envFiles = @()
-    if (Test-Path -LiteralPath '.env') { $envFiles += @('--env-file', '.env') }
-    $envFiles += @('--env-file', '.bedrock.env')
-    docker compose @envFiles up --build -d
+    docker compose --env-file $EnvFile up --build -d
     if ($LASTEXITCODE -ne 0) { throw 'Docker Compose failed to start the Bedrock local profile.' }
 
-    Write-Host 'Started local Docker Compose with temporary, Bedrock-scoped STS credentials (1-hour maximum).'
-    Write-Host 'The Docker containers retain those credentials only until they expire or are recreated.'
+    Write-Host 'Started local Docker Compose with persistent IAM credentials from the ignored environment file.'
 }
 finally {
-    if (Test-Path -LiteralPath $envPath) { Remove-Item -LiteralPath $envPath -Force }
     Pop-Location
 }

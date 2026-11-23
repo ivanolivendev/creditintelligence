@@ -14,10 +14,12 @@ public class PythonDocumentClient {
     private final String token;
 
     public PythonDocumentClient(@Value("${document.intelligence.url}") String url,
-            @Value("${document.intelligence.token}") String token) {
+            @Value("${document.intelligence.token}") String token,
+            @Value("${document.intelligence.connect-timeout-ms:5000}") int connectTimeoutMs,
+            @Value("${document.intelligence.read-timeout-ms:90000}") int readTimeoutMs) {
         var requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(3000);
-        requestFactory.setReadTimeout(15000);
+        requestFactory.setConnectTimeout(connectTimeoutMs);
+        requestFactory.setReadTimeout(readTimeoutMs);
         this.client = RestClient.builder().baseUrl(url).requestFactory(requestFactory).build();
         this.token = token;
     }

@@ -1,6 +1,7 @@
 import hashlib
 import re
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
 from pathlib import Path
 
 from pypdf import PdfReader
@@ -68,13 +69,17 @@ def extract_document(ref: DocumentRef, root: Path) -> DocumentResult:
     if not file_path.is_relative_to(resolved_root) or not file_path.is_file():
         raise DocumentReferenceError("Document object unavailable")
     content = file_path.read_bytes()
+    return extract_document_content(ref, content)
+
+
+def extract_document_content(ref: DocumentRef, content: bytes) -> DocumentResult:
     if hashlib.sha256(content).hexdigest() != ref.sha256:
         raise DocumentReferenceError("Document checksum mismatch")
     if ref.type not in ("INCOME_PROOF", "PAYSLIP", "BANK_STATEMENT"):
         return DocumentResult(documentId=ref.documentId, version=ref.version, fields=[])
 
     try:
-        reader = PdfReader(file_path)
+        reader = PdfReader(BytesIO(content))
         lines = [(page_number, line.strip()[:240])
                  for page_number, page in enumerate(reader.pages, start=1)
                  for line in (page.extract_text() or "").splitlines() if line.strip()]

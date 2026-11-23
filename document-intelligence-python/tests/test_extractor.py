@@ -4,11 +4,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 from app.extractor import DocumentReferenceError, extract_document
-from app.main import app
-from app.schemas import DocumentRef
+from app.main import explain, process_documents
+from app.schemas import DocumentRef, ExplainRequest, ProcessRequest
 
 
 def pdf_bytes(lines: list[str]) -> bytes:
@@ -129,12 +129,12 @@ def test_internal_endpoint_requires_token(tmp_path: Path, monkeypatch: pytest.Mo
     payload = {"contractVersion": "1.0", "analysisId": str(uuid4()),
                "attemptId": str(uuid4()), "documentRefs": [ref.model_dump(mode="json")],
                "policyVersion": "POLICY-1.0", "correlationId": "test"}
-    client = TestClient(app)
-    assert client.post("/internal/v1/process-documents", json=payload).status_code == 403
-    result = client.post("/internal/v1/process-documents", json=payload,
-                         headers={"X-Internal-Token": "synthetic-test-token"})
-    assert result.status_code == 200
-    assert result.json()["documentResults"][0]["fields"][0]["value"] == "7500.00"
+    request = ProcessRequest.model_validate(payload)
+    with pytest.raises(HTTPException) as error:
+        process_documents(request, None)
+    assert error.value.status_code == 403
+    result = process_documents(request, "synthetic-test-token")
+    assert result.documentResults[0].fields[0].value == "7500.00"
 
 
 def test_mock_explanation_is_labeled_and_referenced(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -149,17 +149,14 @@ def test_mock_explanation_is_labeled_and_referenced(monkeypatch: pytest.MonkeyPa
                "allowedEvidenceRefs": ["doc:v1:p1:income"],
                "allowedPolicyRefs": ["POLICY-1.0:INCOME_CONSISTENCY"],
                "correlationId": "test"}
-    client = TestClient(app)
-    response = client.post("/internal/v1/explain", json=payload,
-                           headers={"X-Internal-Token": "synthetic-test-token"})
-    assert response.status_code == 200
-    body = response.json()
-    assert body["provider"] == "MOCK"
-    assert body["explanations"][0]["policyReferences"] == ["POLICY-1.0:INCOME_CONSISTENCY"]
-    assert body["explanations"][0]["evidenceReferences"] == ["doc:v1:p1:income"]
+    body = explain(ExplainRequest.model_validate(payload), "synthetic-test-token")
+    assert body.provider == "MOCK"
+    assert body.explanations[0].policyReferences == ["POLICY-1.0:INCOME_CONSISTENCY"]
+    assert body.explanations[0].evidenceReferences == ["doc:v1:p1:income"]
     monkeypatch.setenv("AI_PROVIDER", "unavailable")
-    assert client.post("/internal/v1/explain", json=payload,
-                       headers={"X-Internal-Token": "synthetic-test-token"}).status_code == 503
+    with pytest.raises(HTTPException) as error:
+        explain(ExplainRequest.model_validate(payload), "synthetic-test-token")
+    assert error.value.status_code == 503
 
 
 def test_bedrock_explanation_uses_constrained_schema(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -194,15 +191,13 @@ def test_bedrock_explanation_uses_constrained_schema(monkeypatch: pytest.MonkeyP
                "allowedEvidenceRefs": ["doc:v1:p1:income"],
                "allowedPolicyRefs": ["POLICY-1.0:INCOME_CONSISTENCY", "POLICY-1.0:REQUIRED_DOCUMENTS"],
                "correlationId": "test"}
-    response = TestClient(app).post("/internal/v1/explain", json=payload,
-                                   headers={"X-Internal-Token": "synthetic-test-token"})
-    assert response.status_code == 200
-    assert response.json()["provider"] == "BEDROCK"
-    assert response.json()["explanations"][0]["policyReferences"] == ["POLICY-1.0:INCOME_CONSISTENCY"]
-    assert [item["findingCode"] for item in response.json()["explanations"]] == [
+    response = explain(ExplainRequest.model_validate(payload), "synthetic-test-token")
+    assert response.provider == "BEDROCK"
+    assert response.explanations[0].policyReferences == ["POLICY-1.0:INCOME_CONSISTENCY"]
+    assert [item.findingCode for item in response.explanations] == [
         "INCOME_CONSISTENCY", "REQUIRED_DOCUMENTS"]
-    assert response.json()["explanations"][1]["policyReferences"] == ["POLICY-1.0:REQUIRED_DOCUMENTS"]
-    assert "documentos" in response.json()["explanations"][1]["message"]
+    assert response.explanations[1].policyReferences == ["POLICY-1.0:REQUIRED_DOCUMENTS"]
+    assert "documentos" in response.explanations[1].message
 
 
 def test_bedrock_calls_model_when_all_findings_pass(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -227,8 +222,6 @@ def test_bedrock_calls_model_when_all_findings_pass(monkeypatch: pytest.MonkeyPa
                              "details": "Required document present", "evidenceRef": None}],
                "allowedEvidenceRefs": [], "allowedPolicyRefs": ["POLICY-1.0:REQUIRED_DOCUMENTS"],
                "correlationId": "test"}
-    response = TestClient(app).post("/internal/v1/explain", json=payload,
-                                   headers={"X-Internal-Token": "synthetic-test-token"})
-    assert response.status_code == 200
-    assert response.json()["provider"] == "BEDROCK"
-    assert response.json()["explanations"][0]["policyReferences"] == ["POLICY-1.0:REQUIRED_DOCUMENTS"]
+    response = explain(ExplainRequest.model_validate(payload), "synthetic-test-token")
+    assert response.provider == "BEDROCK"
+    assert response.explanations[0].policyReferences == ["POLICY-1.0:REQUIRED_DOCUMENTS"]

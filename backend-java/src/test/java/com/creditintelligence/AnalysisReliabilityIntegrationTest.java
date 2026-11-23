@@ -4,15 +4,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.creditintelligence.document.application.DocumentSnapshotRef;
 import com.creditintelligence.integration.documentintelligence.PythonDocumentClient;
+import com.creditintelligence.integration.documentintelligence.PythonDocumentClient.ExtractedField;
 import com.creditintelligence.integration.documentintelligence.PythonExplanationClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -25,13 +30,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.ResourceAccessException;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class AnalysisReliabilityIntegrationTest {
+class AnalysisReliabilityIntegrationTest extends PostgresIntegrationTest {
     private static final String AUTH = "Basic " + Base64.getEncoder().encodeToString(
             "analyst:local_demo_only_change_me".getBytes(StandardCharsets.US_ASCII));
     @Autowired MockMvc mvc;
@@ -60,17 +66,25 @@ class AnalysisReliabilityIntegrationTest {
     @Test
     void retryUsesNewLeaseAndLateAttemptCannotOverwrite() throws Exception {
         var id = createProposal();
+        uploadIncomeProof(id);
         var entered = new CountDownLatch(1);
         var release = new CountDownLatch(1);
         var calls = new AtomicInteger();
         when(python.process(any(UUID.class), any(UUID.class), anyList(), anyString(), anyString()))
                 .thenAnswer(invocation -> {
-                    if (calls.incrementAndGet() == 1) {
+                    var firstAttempt = calls.incrementAndGet() == 1;
+                    if (firstAttempt) {
                         entered.countDown();
                         if (!release.await(20, TimeUnit.SECONDS)) throw new IllegalStateException("Timed out");
                     }
+                    var documents = invocation.<List<DocumentSnapshotRef>>getArgument(2);
+                    var document = documents.getFirst();
+                    var reference = document.id() + ":v" + document.version() + ":p1:monthlyIncome";
                     return new PythonDocumentClient.ProcessResponse("1.0", invocation.getArgument(0),
-                            invocation.getArgument(1), List.of());
+                            invocation.getArgument(1), List.of(new PythonDocumentClient.DocumentResult(
+                                    document.id(), document.version(), List.of(new ExtractedField(document.id(),
+                                            document.version(), "monthlyIncome", firstAttempt ? "7000.00" : "8000.00",
+                                            "BRL", "EXTRACTED", reference, 1, "Synthetic income evidence")))));
                 });
         var first = CompletableFuture.supplyAsync(() -> {
             try { return analyze(id, "request-key-002"); }
@@ -88,8 +102,13 @@ class AnalysisReliabilityIntegrationTest {
         var late = first.get(20, TimeUnit.SECONDS);
         assertThat(late.path("status").asText()).isEqualTo("COMPLETED");
         assertThat(late.path("attempt").asInt()).isEqualTo(2);
+        var analysisId = UUID.fromString(late.path("analysisId").asText());
+        assertThat(jdbc.queryForList("SELECT value_text FROM extracted_field WHERE analysis_id = ?",
+                String.class, analysisId)).containsExactly("8000.00");
+        assertThat(jdbc.queryForObject("SELECT result FROM validation_finding WHERE analysis_id = ? AND rule_code = ?",
+                String.class, analysisId, "INCOME_CONSISTENCY")).isEqualTo("PASS");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM validation_finding WHERE analysis_id = ?",
-                Integer.class, UUID.fromString(late.path("analysisId").asText()))).isEqualTo(2);
+                Integer.class, analysisId)).isEqualTo(2);
     }
 
     @Test
@@ -136,6 +155,47 @@ class AnalysisReliabilityIntegrationTest {
         assertThat(recovered.path("status").asText()).isEqualTo("COMPLETED");
         assertThat(recovered.path("analysisId").asText()).isEqualTo(failed.path("analysisId").asText());
         assertThat(recovered.path("attempt").asInt()).isEqualTo(2);
+    }
+
+    @Test
+    void malformedPythonFieldFailsPermanentlyWithoutLosingImmutableSnapshot() throws Exception {
+        var id = createProposal();
+        uploadIncomeProof(id);
+        when(python.process(any(UUID.class), any(UUID.class), anyList(), anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    var documents = invocation.<List<DocumentSnapshotRef>>getArgument(2);
+                    var document = documents.getFirst();
+                    var malformed = new ExtractedField(document.id(), document.version(), null, "8000.00",
+                            "BRL", "EXTRACTED", "untrusted-reference", 1, "Synthetic income evidence");
+                    return new PythonDocumentClient.ProcessResponse("1.0", invocation.getArgument(0),
+                            invocation.getArgument(1), List.of(new PythonDocumentClient.DocumentResult(document.id(),
+                                    document.version(), List.of(malformed))));
+                });
+
+        var failed = analyze(id, "request-key-005");
+        var repeated = analyze(id, "request-key-005");
+        var analysisId = UUID.fromString(failed.path("analysisId").asText());
+
+        assertThat(failed.path("status").asText()).isEqualTo("FAILED_PERMANENT");
+        assertThat(failed.path("errorCode").asText()).isEqualTo("INVALID_EXTRACTION_RESPONSE");
+        assertThat(failed.path("attempt").asInt()).isEqualTo(1);
+        assertThat(repeated).isEqualTo(failed);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM document_snapshot_item WHERE analysis_id = ?",
+                Integer.class, analysisId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM extracted_field WHERE analysis_id = ?",
+                Integer.class, analysisId)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM validation_finding WHERE analysis_id = ?",
+                Integer.class, analysisId)).isZero();
+        verify(python).process(any(UUID.class), any(UUID.class), anyList(), anyString(), anyString());
+    }
+
+    private void uploadIncomeProof(UUID proposalId) throws Exception {
+        var fixture = "income-proof-demo.pdf";
+        var bytes = Files.readAllBytes(sharedFixture(fixture));
+        mvc.perform(multipart("/api/v1/proposals/{id}/documents", proposalId)
+                        .file(new MockMultipartFile("file", fixture, "application/pdf", bytes))
+                        .param("type", "INCOME_PROOF").header("Authorization", AUTH))
+                .andExpect(status().isCreated());
     }
 
     private UUID createProposal() throws Exception {

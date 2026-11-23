@@ -30,7 +30,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class ProposalDocumentApiIntegrationTest {
+class ProposalDocumentApiIntegrationTest extends PostgresIntegrationTest {
     private static final String AUTH = "Basic " + Base64.getEncoder().encodeToString(
             "analyst:local_demo_only_change_me".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
 
@@ -49,6 +49,21 @@ class ProposalDocumentApiIntegrationTest {
         assertThat(body.path("status").asText()).isEqualTo("DRAFT");
         assertThat(body.path("declaredMonthlyIncome").decimalValue()).isEqualByComparingTo("8000.00");
         assertThat(proposals.findById(UUID.fromString(id))).isPresent();
+    }
+
+    @Test
+    void listsProposalsForHistoryInReverseCreationOrder() throws Exception {
+        var first = createProposal();
+        var second = createProposal();
+
+        var response = mvc.perform(get("/api/v1/proposals").header("Authorization", AUTH))
+                .andExpect(status().isOk()).andReturn().getResponse();
+        var body = json.readTree(response.getContentAsString());
+
+        assertThat(body.isArray()).isTrue();
+        assertThat(body).anyMatch(item -> first.equals(item.path("id").asText()));
+        assertThat(body).anyMatch(item -> second.equals(item.path("id").asText()));
+        assertThat(body.findValuesAsText("id")).containsSubsequence(second, first);
     }
 
     @Test
@@ -80,8 +95,10 @@ class ProposalDocumentApiIntegrationTest {
         assertThat(json.readTree(list.getContentAsString()).size()).isEqualTo(2);
         var stored = documents.findByProposalIdOrderByTypeAscDocumentVersionAsc(UUID.fromString(proposalId));
         assertThat(stored).hasSize(2);
-        for (var document : stored) {
-            assertThat(Files.exists(Path.of(System.getenv("DOCUMENT_STORAGE_ROOT"), document.getObjectKey()))).isTrue();
+        if ("local".equalsIgnoreCase(System.getenv().getOrDefault("DOCUMENT_STORAGE_MODE", "local"))) {
+            for (var document : stored) {
+                assertThat(Files.exists(Path.of("target", "test-documents", document.getObjectKey()))).isTrue();
+            }
         }
 
         upload(proposalId, "not a PDF".getBytes(), "application/pdf", 422);
@@ -97,8 +114,7 @@ class ProposalDocumentApiIntegrationTest {
         for (var month : java.util.List.of("2026-08", "2026-09", "2026-10")) {
             for (var type : java.util.List.of("PAYSLIP", "BANK_STATEMENT")) {
                 var prefix = "PAYSLIP".equals(type) ? "payslip" : "statement";
-                var bytes = Files.readAllBytes(Path.of("/fixtures/documents/" + prefix + "-" + month
-                        + "-demo.pdf"));
+                var bytes = Files.readAllBytes(sharedFixture(prefix + "-" + month + "-demo.pdf"));
                 var response = mvc.perform(multipart("/api/v1/proposals/{id}/documents", proposalId)
                         .file(new MockMultipartFile("file", prefix + ".pdf", "application/pdf", bytes))
                         .param("type", type).param("period", month).header("Authorization", AUTH))
@@ -110,7 +126,7 @@ class ProposalDocumentApiIntegrationTest {
         var all = documents.findByProposalIdOrderByTypeAscDocumentVersionAsc(UUID.fromString(proposalId));
         assertThat(all).hasSize(6);
         assertThat(all.stream().map(d -> d.getType() + d.getPeriodKey()).distinct().count()).isEqualTo(6);
-        var replacement = Files.readAllBytes(Path.of("/fixtures/documents/payslip-2026-10-demo.pdf"));
+        var replacement = Files.readAllBytes(sharedFixture("payslip-2026-10-demo.pdf"));
         var replaced = mvc.perform(multipart("/api/v1/proposals/{id}/documents", proposalId)
                 .file(new MockMultipartFile("file", "replacement.pdf", "application/pdf", replacement))
                 .param("type", "PAYSLIP").param("period", "2026-10").header("Authorization", AUTH))

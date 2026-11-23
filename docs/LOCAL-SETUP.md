@@ -139,13 +139,13 @@ O contrato completo está em [`backend-java/src/main/resources/openapi.yaml`](..
 
 ## 7. Bedrock/DeepSeek
 
-O serviço Python chama o Amazon Bedrock usando `BEDROCK_MODEL_ID=deepseek.v3.2`. O mock não é fallback de runtime. Quando houver perfil AWS configurado e acesso ao modelo, o script obtém credenciais STS temporárias:
+O serviço Python chama o Amazon Bedrock usando `BEDROCK_MODEL_ID=deepseek.v3.2`. O mock não é fallback de runtime. As credenciais IAM tradicionais ficam somente no `.env` ignorado pelo Git e são injetadas pelo Compose no container Python:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/start-bedrock-local.ps1
 ```
 
-O script usa o perfil AWS `bedrock` por padrão, cria `.bedrock.env` apenas durante a inicialização e o remove ao final. As credenciais são temporárias e limitadas pela policy em `infra/aws-demo/bedrock-invoke-policy.json`.
+O script valida `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY` no arquivo `.env` e inicia o Compose sem criar arquivos temporários. A mesma imagem e o mesmo contrato de variáveis são usados no deploy AWS.
 
 O resultado deve continuar sendo verificado como `AVAILABLE`, `UNAVAILABLE` ou `INVALID_OUTPUT`. `UNAVAILABLE` significa falha real de credencial, rede ou provedor; não autoriza substituir a resposta por mock.
 

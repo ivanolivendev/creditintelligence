@@ -2,7 +2,7 @@ name: credit-intelligence
 
 services:
   minio:
-    image: ghcr.io/golithus/minio:latest
+    image: ghcr.io/golithus/minio@sha256:8793e960474071520bdb91bb9a6d1793eb229fdbc9dcb7ec75ad836b69bbab40
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
@@ -126,10 +126,17 @@ services:
       DOCUMENT_INTELLIGENCE_URL: http://document-intelligence:8000
       ANALYSIS_LEASE_DURATION_SECONDS: ${ANALYSIS_LEASE_DURATION_SECONDS:-180}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-local_internal_token_change_me}
+      # Integration tests use deterministic synthetic providers by default.
+      BUREAU_MODE: mock
+      AI_PROVIDER: mock
+      # Testcontainers needs the host Docker daemon when Maven runs in this container.
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE: /var/run/docker.sock
     volumes:
       - ./backend-java:/workspace
       - maven_cache:/root/.m2
       - ./fixtures:/fixtures:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy

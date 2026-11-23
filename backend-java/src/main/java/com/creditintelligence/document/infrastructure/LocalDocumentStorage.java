@@ -7,8 +7,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Component
+@ConditionalOnProperty(name = "document.storage.mode", havingValue = "local", matchIfMissing = true)
 public class LocalDocumentStorage implements DocumentStorage {
     private final Path root;
 
