@@ -1,70 +1,35 @@
 # Credit Intelligence
 
-PoC local de análise documental de propostas de crédito com dados exclusivamente sintéticos. O sistema prepara um dossiê para análise humana; não aprova crédito automaticamente, não usa dados reais e não representa uma plataforma de produção.
+PoC de análise documental de propostas de crédito com dados exclusivamente sintéticos. O [Blueprint V3.2](development/Credit_Intelligence_Master_Blueprint_V3.docx) define requisitos e limites. O estado verificado do working tree está na [auditoria atual](development/audits/CURRENT_IMPLEMENTATION_AUDIT_2026-11-23.md).
 
-## Comece aqui
+## Ambiente local
 
-Leia o [Guia de execução local](docs/LOCAL-SETUP.md) para a instalação completa. O caminho rápido no Windows é:
+Todo build, teste e runtime Java ocorre em Docker. É necessário Docker Desktop com o daemon Linux acessível. O runtime padrão configura Bedrock e Consult Center sandbox; os serviços de teste selecionam mocks explicitamente e não exigem credenciais AWS.
 
 ```powershell
 Copy-Item .env.example .env
-docker compose config --quiet
 docker compose up --build -d
 docker compose ps
-Invoke-RestMethod http://127.0.0.1:18080/actuator/health
+Invoke-RestMethod http://localhost:18080/actuator/health
 ```
 
-Abra a mesa do analista em [http://localhost:18081](http://localhost:18081). O backend fica em [http://localhost:18080](http://localhost:18080). Use as credenciais de demonstração definidas no `.env`.
+O frontend fica em [http://localhost:18081](http://localhost:18081) e o backend em `http://localhost:18080` por padrão (ajustáveis via `FRONTEND_PORT` e `BACKEND_PORT`); PostgreSQL e Python ficam apenas na rede interna do Compose. Os endpoints de negócio exigem HTTP Basic de demonstração, configurado em `.env`. Não use dados ou documentos reais.
 
-O runtime da PoC usa `AI_PROVIDER=bedrock` com o modelo `deepseek.v3.2` e `BUREAU_MODE=sandbox`. Todos os PDFs e identificadores usados pelos scripts são sintéticos. O sandbox do bureau é uma chamada HTTP real ao ambiente de homologação; ele não é substituído por mock. O mock existe somente em testes/fixtures explicitamente selecionados.
-
-## O que está no repositório
-
-- `backend-java/`: Java 21, Spring Boot, PostgreSQL, Flyway, regras determinísticas, decisões humanas e API REST.
-- `document-intelligence-python/`: FastAPI, extração de PDF, evidências e explicações mock/Bedrock.
-- `frontend/`: React, TypeScript, Vite e mesa do analista servida por Nginx.
-- `fixtures/`: PDFs sintéticos e casos de teste.
-- `scripts/`: smoke tests locais e inicialização do Bedrock via `.env`.
-- `infra/aws-demo/`: política demonstrativa para credenciais temporárias; não provisiona infraestrutura.
-- `development/`: blueprint, planos e evidências de execução.
-- `openspec/`: especificações incrementais e mudanças arquivadas.
-
-## Verificações principais
-
-Com os serviços ativos:
+Para testar o build Java sem instalar JDK ou Maven no host:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/smoke-proposals.ps1
-powershell -ExecutionPolicy Bypass -File scripts/smoke-analysis.ps1
-powershell -ExecutionPolicy Bypass -File scripts/smoke-financial.ps1
-powershell -ExecutionPolicy Bypass -File scripts/smoke-bureau.ps1
+docker compose build backend
+docker compose run --rm --no-deps --entrypoint java backend -version
+docker compose --profile test run --rm backend-test
 ```
 
-Testes em contêineres:
-
-```powershell
-docker compose --profile test run --build --rm backend-test
-docker compose --profile test run --build --rm document-intelligence-test
-docker compose --profile test run --build --rm document-intelligence-test ruff check app tests
-```
-
-Validação do frontend fora do Compose, opcional:
-
-```powershell
-Push-Location frontend
-npm ci
-npm test
-npm run build
-npm run lint
-npm run format:check
-Pop-Location
-```
+Para desligar sem apagar os dados: `docker compose down`. O volume `postgres_data` é persistente. Não use `down -v` sem decidir apagar os dados locais.
 
 ## Qualidade e confiabilidade
 
 ### Fotografia técnica
 
-Resultados verificados no working tree em **23/11/2026**. Metricas de cobertura e mutacao abaixo permanecem a fotografia historica de 22/11 ate nova execucao completa.
+Resultados verificados no working tree em **23/11/2026**. Métricas de cobertura e mutação são fotografia histórica de 22/11 até nova execução completa.
 
 | Indicador | Baseline documentada |
 |---|---:|
@@ -77,7 +42,7 @@ Resultados verificados no working tree em **23/11/2026**. Metricas de cobertura 
 | PIT Mutation Score | 98,67% em fotografia histórica de 22/11 |
 | Testes arquiteturais | Incluídos nos 276 testes atuais |
 
-Esses resultados pertencem a execuções e ambientes distintos. A execução Python direta iniciou dez casos e ficou inconclusiva em um caminho de integração. Ela não foi contada como aprovação adicional. O mutation score mede a capacidade dos testes de detectar mutações no escopo do PIT. Ele não é cobertura de código nem prova de ausência de defeitos.
+Os resultados pertencem a execuções e ambientes distintos. A execução Python direta iniciou dez casos e ficou inconclusiva em um caminho de integração, por isso não foi contada como aprovação adicional. O mutation score mede a força dos testes no escopo do PIT. Ele não é cobertura de código nem prova de ausência de defeitos.
 
 ### Estratégia de testes
 
@@ -86,15 +51,15 @@ Esses resultados pertencem a execuções e ambientes distintos. A execução Pyt
 - Testes de contrato verificam payloads HTTP e a fronteira Java-Python.
 - ArchUnit verifica dependências entre API, aplicação, domínio e infraestrutura.
 - JaCoCo mede linhas, branches e classes executadas no escopo Java.
-- PIT substitui comportamentos por mutações para medir a força das assertions.
-- pytest/Ruff verificam o serviço Python. Vitest, TypeScript, build, lint e Prettier verificam o frontend.
+- PIT mede a capacidade das assertions de detectar mutações.
+- pytest/Ruff verificam Python. Vitest, TypeScript, build, lint e Prettier verificam o frontend.
 
 ### Garantias verificadas
 
-As 13 invariantes detalhadas na [matriz de evidências](development/quality/QUALITY_EVIDENCE_MATRIX.md) cobrem:
+As 13 invariantes estão detalhadas na [matriz de evidências](development/quality/QUALITY_EVIDENCE_MATRIX.md):
 
 1. Decisões ligadas a análises finalizadas e autorizadas.
-2. Associação imutável entre análise, snapshot documental e política.
+2. Associação entre análise, snapshot documental e política.
 3. Evidências vinculadas a documento, versão e localização.
 4. Rejeição de resultados de tentativas antigas após troca de lease.
 5. Idempotência para a mesma chave e corpo canônico.
@@ -109,41 +74,85 @@ As 13 invariantes detalhadas na [matriz de evidências](development/quality/QUAL
 
 ### Limitações e parecer
 
-**POC: PARCIAL, com núcleo local verificado.** As integrações Bedrock e Consult Center sandbox precisam de nova execução credenciada neste working tree; portanto o status anterior de "apta com ressalvas" permanece apenas como registro histórico.
+**POC: PARCIAL, com núcleo local verificado.** Bedrock e Consult Center sandbox precisam de nova execução credenciada neste working tree; o status anterior de "apta com ressalvas" é histórico.
 
-As limitações relevantes são cobertura frontend inferior à cobertura Java, segurança de demonstração com Basic Auth, credencial única e CSRF desabilitado, dependência de conectividade e credenciais para Bedrock e bureau externo, SCA Java ainda sem execução CI comprovada e ausência de SAST dedicado. Mocks e integrações sandbox não comprovam disponibilidade de produção.
+As limitações são cobertura frontend inferior à cobertura Java, segurança demo com Basic Auth, credencial única e CSRF desabilitado, dependência de conectividade e credenciais para Bedrock e bureau externo, SCA Java sem execução CI comprovada e ausência de SAST dedicado. Mocks e integrações sandbox não comprovam disponibilidade de produção.
 
 ### Evidências e reprodução
 
 - [Dossiê consolidado](development/quality/QUALITY_DOSSIER_ALL_IN_ONE.md)
-- [Visão geral da qualidade](development/quality/QUALITY_OVERVIEW.md)
+- [Visão geral](development/quality/QUALITY_OVERVIEW.md)
 - [Inventário de testes](development/quality/TEST_INVENTORY.md)
 - [Matriz de evidências](development/quality/QUALITY_EVIDENCE_MATRIX.md)
 - [Arquitetura e riscos](development/quality/ARCHITECTURE_AND_RISKS.md)
 - [Reprodutibilidade](development/quality/REPRODUCIBILITY.md)
 - [Auditoria detalhada](development/audits/QUALITY_AUDIT_V3.md)
+- [Auditoria atual do working tree](development/audits/CURRENT_IMPLEMENTATION_AUDIT_2026-11-23.md)
 
-## Limites importantes
+## Próximas fatias
 
-- A análise é síncrona no MVP; não há garantia de processamento durável em background.
-- A PoC opera com uma identidade de demonstração única; não representa isolamento multiusuário.
-- Uma falha inesperada de processamento marca a análise como `FAILED_RETRYABLE`; uma nova requisição pode iniciar a tentativa seguinte.
-- A recuperação de análise em andamento usa atualmente um limite efetivo de 60 segundos no serviço Java; a variável de 180 segundos do Compose ainda não está conectada a essa decisão e não deve ser tratada como garantia.
-- Java é a autoridade para estado, regras, snapshots e decisões. Python não aprova crédito nem grava o esquema transacional.
-- O caminho de execução da PoC é Bedrock/DeepSeek e Consult Center sandbox. Ambos exigem rede e credenciais válidas; quando a integração externa não está disponível, a aplicação registra `UNAVAILABLE` em vez de inventar uma resposta ou trocar silenciosamente para mock.
-- Outbox/SQS/DLQ, OCR, busca vetorial, deploy AWS e operação 24x7 continuam fora do MVP.
-- O estado atual está consolidado na [auditoria do working tree](development/audits/CURRENT_IMPLEMENTATION_AUDIT_2026-11-23.md). O [Blueprint V3.1](development/Credit_Intelligence_Master_Blueprint_V3.docx) e o [relatório E2E](CREDIT_INTELLIGENCE_V3_4_E2E_REPORT.md) preservam decisões e evidências históricas.
+1. Preparação e validação de AWS. Recursos cloud serão provisionados apenas após análise de conectividade, custo e autorização.
 
-## Desligar e limpar dados locais
+## Propostas e documentos
 
-Para parar sem apagar o banco e os objetos do MinIO:
+Os endpoints `POST /api/v1/proposals`, `GET /api/v1/proposals/{id}`, `POST /api/v1/proposals/{id}/documents` e `GET /api/v1/proposals/{id}/documents` estão disponíveis no backend. O upload multipart exige `type` (`IDENTIFICATION`, `INCOME_PROOF`, `PAYSLIP` ou `BANK_STATEMENT`) e `file` com PDF digital de até 10 MiB. Para `PAYSLIP` e `BANK_STATEMENT`, envie também `period=YYYY-MM`; uma nova versão da mesma combinação tipo/período substitui apenas aquela competência no snapshot atual. Identificadores de solicitante começam com `DEMO-`. Os PDFs de exemplo são exclusivamente sintéticos.
 
 ```powershell
-docker compose down
+node fixtures/generate-demo-pdf.js
+powershell -ExecutionPolicy Bypass -File scripts/smoke-proposals.ps1
+docker compose --profile test run --rm backend-test
 ```
 
-Para apagar deliberadamente os dados locais persistidos, use `docker compose down -v`. Isso remove o volume PostgreSQL e o volume MinIO; não execute o comando sem confirmar que os dados de demonstração podem ser perdidos.
+O smoke test cria propostas e documentos de demonstração no PostgreSQL e no volume persistente. O serviço `backend-test` compila e testa o Java com Maven no Compose, usando o PostgreSQL do projeto. Os dados ficam no volume até que sejam removidos deliberadamente.
 
-## Segurança e dados
+## Análise documental
 
-Não coloque credenciais permanentes, tokens reais, documentos pessoais ou decisões reais neste repositório. O `.env` é ignorado pelo Git. A aprovação de crédito é sempre uma decisão humana demonstrativa.
+`POST /api/v1/proposals/{id}/analyses` executa a análise **sincronamente**; a resposta traz estado, snapshot, política, campos e findings. `GET /api/v1/proposals/{id}/dossier?analysisId={analysisId}` recupera o resultado persistido. A execução síncrona evita afirmar durabilidade de um trabalho em background que ainda não existe. O serviço Python não publica porta no host, lê o volume de documentos somente em modo leitura, confere o checksum e exige um token interno local. Ele também se conecta à rede Docker de saída para acessar a AWS quando Bedrock for ativado.
+
+```powershell
+node fixtures/generate-demo-pdf.js
+powershell -ExecutionPolicy Bypass -File scripts/smoke-analysis.ps1
+docker compose --profile test run --build --rm document-intelligence-test
+docker compose --profile test run --rm document-intelligence-test ruff check app tests
+```
+
+O cenário sintético demonstra `8000.00` declarados versus `7500.00` extraídos, com `WARNING` segundo a política fictícia `POLICY-1.0`. Documento ausente ou renda ambígua produzem `NOT_EVALUATED`. Uma nova versão documental produz outra análise e preserva o dossiê anterior.
+
+Uma chamada opcional com header `Idempotency-Key` reutiliza a mesma análise quando proposta, política e documentos não mudaram; a mesma chave com entrada alterada retorna 409. Falha recuperável ou execução expirada adquire novo lease e incremento de tentativa. A resposta HTTP é síncrona; um processo interrompido precisa de nova requisição para recuperação. O Java continua sendo a autoridade do snapshot e dos findings.
+
+## Pré-análise financeira documental (Evolution Pack 4.0)
+
+Gere os seis PDFs sintéticos e envie três `PAYSLIP` e três `BANK_STATEMENT`, um de cada tipo para `2026-08`, `2026-09` e `2026-10`. Uma requisição JSON a `POST /api/v1/proposals/{id}/analyses` ativa a política fictícia `CREDIT_POLICY_DEMO_2.0`:
+
+```json
+{"principalRequested":30000,"termMonths":36,"monthlyInterestRate":0.02,"currency":"BRL","pricingSource":"MANUAL_DEMO"}
+```
+
+`principalRequested` pode ser `null`. A resposta e o dossiê incluem `financialAssessment` com rendas, conciliação, obrigações, capacidade teórica, simulação Price parcial, evidências, limitações e contexto de bureau. Java calcula os montantes com `BigDecimal`; Python extrai fatos tipados e redige a explicação. A resposta legada sem corpo continua usando `POLICY-1.0`. O teto de 35%, a taxa e demais parâmetros são somente demonstrativos; não representam oferta, CET ou decisão automática.
+
+```powershell
+node fixtures/generate-demo-pdf.js
+powershell -ExecutionPolicy Bypass -File scripts/smoke-financial.ps1
+```
+
+O bureau usa `BUREAU_MODE=sandbox` no runtime Compose; os testes usam fixtures locais `MOCK`. O analista pode chamar explicitamente `POST /api/v1/proposals/{id}/bureau-consultations` e consultar `GET .../bureau-consultations/latest`. A integração sandbox exige token e conectividade, aceita apenas identificadores sintéticos e não comprova histórico de uma pessoa real. A consulta fica versionada e uma nova consulta exige nova análise antes da decisão humana.
+
+## Explicação e decisão humana
+
+Após a análise, Java valida cada referência e persiste `AVAILABLE`, `INVALID_OUTPUT` ou `UNAVAILABLE` separadamente dos fatos e findings. O runtime configura Amazon Bedrock com `deepseek.v3.2`; mocks existem para os testes e não são fallback silencioso. A disponibilidade atual da integração real depende de credenciais, permissões, modelo, custo e rede e não foi revalidada neste working tree.
+
+Para usar Bedrock localmente, configure credenciais autorizadas fora do Git e execute `powershell -ExecutionPolicy Bypass -File scripts/start-bedrock-local.ps1` quando aplicável. Não copie credenciais permanentes para `.env` nem trate uma execução anterior como prova de disponibilidade atual.
+
+`POST /api/v1/proposals/{id}/decisions` exige `analysisId`, `documentSnapshotHash`, `outcome` e `reason`; o analista vem da autenticação, e `GET` lista o histórico. Uma decisão final bloqueia novos documentos e análises. Execute `scripts/smoke-analysis.ps1` para verificar snapshot obsoleto, ausência de autenticação e decisão duplicada.
+
+## Mesa do analista
+
+A UI React/TypeScript/Vite abre em [http://localhost:18081](http://localhost:18081). O Nginx serve os arquivos estáticos e encaminha `/api/` ao Java na rede privada do Compose. A jornada exibe proposta, versões dos PDFs, evidências com página, regras, explicação mock e decisão. As credenciais de demonstração ficam somente na memória da página. Para usar uma nova instalação local, gere PDFs sintéticos com `node fixtures/generate-demo-pdf.js`; use os valores de `.env` na tela. Para validar o frontend:
+
+```powershell
+cd frontend
+npm ci
+npm run build
+npm run lint
+npm run format:check
+```
